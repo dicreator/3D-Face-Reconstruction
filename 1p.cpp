@@ -25,37 +25,59 @@ using namespace std;
 
 //////////////////////////
 
-static void triangulate_delaunay(Mat& img1, std::vector<Point> &pnt, std::vector<Point2f> &basePoints){
+std::vector< std::vector<Point> > triangulate_delaunay(Mat& img1, std::vector<Point2f> &basePoints){
   // Keep a copy around
 
   // Rectangle to be used with Subdiv2D
   Size size = img1.size();
   Rect rect(0, 0, size.width, size.height);
   Subdiv2D subdiv(rect);
+  int size_list = 0;
+  int row = 0;
+
 
   for( std::vector<Point2f>::iterator it = basePoints.begin(); it != basePoints.end(); it++){
     subdiv.insert(*it);
-    cout << *it << '\n';
-
   }
 
   std::vector<Vec6f> triangleList;
+
   subdiv.getTriangleList(triangleList);
-
   //change
-  for (auto tri: triangleList){
-    cout << tri << '\n';
-  }
 
+
+  //define size for 2-D vector
   for (size_t i = 0; i < triangleList.size(); i++){
     Vec6f trg = triangleList[i];
-    for (int j = 0; j < 3; j++){
-      pnt.push_back(Point(cvRound(trg[0]), cvRound(trg[1])));
-      pnt.push_back(Point(cvRound(trg[2]), cvRound(trg[3])));
-      pnt.push_back(Point(cvRound(trg[4]), cvRound(trg[5])));
+
+    if (rect.contains(Point(cvRound(trg[0]),cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]),cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]),cvRound(trg[5])))){
+      size_list++;
     }
   }
 
+  std::cout << size_list << '\n';
+  std::vector< std::vector<Point> > pnt(size_list);
+  std::vector<Point> pit(3);
+
+  //Loop to insert tiangle points into the 2D vector
+  for (size_t i = 0; i < triangleList.size(); i++){
+    Vec6f trg = triangleList[i];
+
+    pit[0] = Point(cvRound(trg[0]), cvRound(trg[1]));
+    pit[1] = Point(cvRound(trg[2]), cvRound(trg[3]));
+    pit[2] = Point(cvRound(trg[4]), cvRound(trg[5]));
+
+    // Identify is the point inside the rectangle
+    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
+
+          //insert triangle points
+          pnt[row].push_back(pit[0]);
+          pnt[row].push_back(pit[1]);
+          pnt[row].push_back(pit[2]);
+          row++;
+        }
+  }
+  return pnt;
 }
 
 
@@ -75,7 +97,7 @@ int main( int argc, char** argv){
 
   image_window win, win_faces;
   array2d<rgb_pixel> img;
-  string fname1("Untitled Folder/avefac.jpg");
+  string fname1("Untitled Folder/face-straight1.jpg");
   // string fname1("Untitled Folder/face-straight1.jpg");
 
 
@@ -137,17 +159,19 @@ Mat outImg;
 imgTr.convertTo(imgTr, CV_32FC3);
 
 // Output image is set to white
-// Mat txtimage = imread("fullface-texture.jpg",1 );
-// txtimage.convertTo(txtimage, CV_32FC3);
-Mat txtimage = Mat::ones(imgTr.size(), imgTr.type());
+Mat txtimage = imread("fullface-texture.jpg",1 );
+txtimage.convertTo(txtimage, CV_32FC3);
+// Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
 txtimage = Scalar(1.0,1.0,1.0);
 
-cout << imgTr.size() << '\n';
-cout << txtimage.size() << '\n';
 
-std::vector<Point> pnt;
+std::vector< std::vector<Point> > pnt;
 
-// triangulate_delaunay(img1, pnt, basePoints);
+pnt = triangulate_delaunay(txtimage, basePoints);
+
+for(auto tri : pnt){
+  cout << tri << '\n';
+}
 
 std::vector<Point2f> inpt;
 inpt.push_back(trgPoints[37]);
@@ -158,22 +182,6 @@ outpt.push_back(basePoints[37]);
 outpt.push_back(basePoints[0]);
 outpt.push_back(basePoints[3]);
 
-for(auto tri : inpt){
-  cout << tri << '\n';
-}
-
-for(auto tri : outpt){
-  cout << tri << '\n';
-}
-// std::vector<Point2f> midPt;
-// for (int i; i < inpt.size(); i++){
-//   float g,b;
-//   g = (1 -0.5) * inpt[i].x + 0.5 * outpt[i].x;
-//   b = (1 -0.5) * inpt[i].y + 0.5 * outpt[i].y;
-//
-//   midPt.push_back(Point2f(g,b));
-// }
-// Mat imgMorph = Mat::zeros(txtimage.size(), CV_32FC3);
 
 
 // Rect r = boundingRect(midPt);
@@ -182,42 +190,23 @@ Rect r2 = boundingRect(outpt);
 
 
 //////
-// . r location of radius ( distance between rectangle and triangle )
 std::vector<Point2f> t1Rect, t2Rect;
 std::vector<Point> tRectInt;
 for(int i = 0; i < 3; i++)
 {
-    // tRect.push_back( Point2f( midPt[i].x - r.x, midPt[i].y -  r.y) ); //for average
-    // tRectInt.push_back( Point(midPt[i].x - r.x, midPt[i].y - r.y) ); // for fillConvexPoly
 
     t1Rect.push_back( Point2f( inpt[i].x - r1.x, inpt[i].y -  r1.y) ); //rect 1
     t2Rect.push_back( Point2f( outpt[i].x - r2.x, outpt[i].y - r2.y) ); //rect2
     tRectInt.push_back( Point((int)(outpt[i].x - r2.x), (int)(outpt[i].y - r2.y)) ); // for fillConvexPoly
 }////
 
-// Mat img1Rect, img2Rect;
 Mat img1Rect;
 imgTr(r1).copyTo(img1Rect);
-// txtimage(r2).copyTo(img2Rect);
 
 
 
-// Mat mask = Mat::zeros(r.height, r.width, CV_32FC3);
-////////////////////
-//image - mask
-//tRectInt  - cvertices
-//Scalar to specify color intensity
-// 16 - line type
-/////////////////////////////
-// fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0), 16, 0);
 
-//apply warpImage
 
-// Mat warpImage1 = Mat::zeros(r.height, r.width, img1Rect.type());
-// Mat warpImage2 = Mat::zeros(r.height, r.width, img2Rect.type());
-
-// applyAffineTransform(warpImage1, img1Rect, t1Rect, tRect);
-// applyAffineTransform(warpImage2, img2Rect, t2Rect, tRect);
 /////////////////////////
 // if (0 <= r2.x
 //   && 0 <= r2.width
@@ -235,21 +224,25 @@ Mat img2Rect = Mat::zeros(r2.height, r2.width,img1Rect.type());
 warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
 
 // Get mask by filling triangle
-Mat mask = Mat::zeros(r2.height, r2.width, CV_8UC1);
+Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
 
+////////////////////
+//image - mask
+//tRectInt  - cvertices
+//Scalar to specify color intensity
+// 16 - line type
+/////////////////////////////
 fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0), 16, 0);
 
-// Copy triangular region of the rectangular patch to the output image
-multiply(img2Rect,mask, img2Rect);
+// apply traingl to the image
+multiply(img2Rect, mask, img2Rect);
 multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
+
 txtimage(r2) = txtimage(r2) + img2Rect;
 
 txtimage.convertTo(txtimage, CV_8UC3);
 
-
-cout << imgTr.size() << '\n';
-cout << txtimage.size() << '\n';
-
+// imwrite("save-texture.jpg", txtimage);
 imshow("Morphed Face", txtimage);
 
 
@@ -258,31 +251,6 @@ imshow("Morphed Face", txtimage);
 //     return -1;
 //   }
 
-
-///////////////////////////////////////////////////////
-// Mat warpMat1 = getAffineTransform(t1Rect, tRect);
-// Mat warpMat2 = getAffineTransform(t2Rect, tRect);
-// warpAffine(img1Rect, warpImage1, warpMat1, warpImage1.size(), INTER_LINEAR, BORDER_REFLECT_101);
-// warpAffine(img2Rect, warpImage2, warpMat2, warpImage2.size(), INTER_LINEAR, BORDER_REFLECT_101);
-//
-// Mat imgRect = (1.0 - 0.5) * warpImage1 + 0.5*warpImage2;
-//
-//   multiply(imgRect, mask, imgRect);
-// multiply(imgMorph(r), Scalar(1.0,1.0,1.0)-mask, imgMorph(r));
-// imgMorph(r) = imgMorph(r) + imgRect;
-//
-//
-// imshow("Morphed Face", imgMorph / 255.0);
-
-//////
-  // cout << r1 << '\n';
-
-
-// Mat lambda = getPerspectiveTransform(inpt, outpt);
-//
-// warpPerspective(imgTr, outImg, lambda, txtimage.size()); // check correct input
-//
-// imshow("outImg",outImg);
 
 ///////////////////////////
 
