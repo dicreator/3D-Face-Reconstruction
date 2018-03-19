@@ -25,7 +25,7 @@ using namespace std;
 
 //////////////////////////
 
-std::vector< std::vector<Point> > triangulate_delaunay(Mat& img1, std::vector<Point2f> &basePoints){
+std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Point2f> &basePoints){
   // Keep a copy around
 
   // Rectangle to be used with Subdiv2D
@@ -34,50 +34,64 @@ std::vector< std::vector<Point> > triangulate_delaunay(Mat& img1, std::vector<Po
   Subdiv2D subdiv(rect);
   int size_list = 0;
   int row = 0;
-
-
   for( std::vector<Point2f>::iterator it = basePoints.begin(); it != basePoints.end(); it++){
     subdiv.insert(*it);
   }
 
   std::vector<Vec6f> triangleList;
-
   subdiv.getTriangleList(triangleList);
-  //change
 
+  //check if points are inside
+  for (size_t i = 0; i < triangleList.size(); i++){
+    Vec6f trg = triangleList[i];
+    if (rect.contains(Point(cvRound(trg[0]),cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]),cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]),cvRound(trg[5])))){
+      size_list += 1;
+    }
+  }
 
+  std::vector<Point2f> pit(3);
+  std::vector< std::vector<int> > indaxes(size_list);
+
+  std::cout << size_list << '\n';
+
+//////////////////////////////////////
   //define size for 2-D vector
   for (size_t i = 0; i < triangleList.size(); i++){
     Vec6f trg = triangleList[i];
 
+    pit[0] = Point2f(trg[0], trg[1]);
+    pit[1] = Point2f(trg[2], trg[3]);
+    pit[2] = Point2f(trg[4], trg[5]);
+
+        // Identify is the point inside the rectangle
+//    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
     if (rect.contains(Point(cvRound(trg[0]),cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]),cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]),cvRound(trg[5])))){
-      size_list++;
-    }
-  }
 
-  std::cout << size_list << '\n';
-  std::vector< std::vector<Point> > pnt(size_list);
-  std::vector<Point> pit(3);
+      for(int j = 0; j < 3; j++){
+//////////////
+        bool found = false;
+        auto pos = std::find(basePoints.begin(), basePoints.end(), pit[j]);
+        if( pos !=  basePoints.end()) found = true;
+        if(found)
+        {
+       int index = std::distance(basePoints.begin(), pos );
 
-  //Loop to insert tiangle points into the 2D vector
-  for (size_t i = 0; i < triangleList.size(); i++){
-    Vec6f trg = triangleList[i];
+       // std::cout << index << '\n';
+       indaxes[row].push_back(index);
 
-    pit[0] = Point(cvRound(trg[0]), cvRound(trg[1]));
-    pit[1] = Point(cvRound(trg[2]), cvRound(trg[3]));
-    pit[2] = Point(cvRound(trg[4]), cvRound(trg[5]));
-
-    // Identify is the point inside the rectangle
-    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
-
-          //insert triangle points
-          pnt[row].push_back(pit[0]);
-          pnt[row].push_back(pit[1]);
-          pnt[row].push_back(pit[2]);
-          row++;
+        }else{
+          std::cout << "not found:\t" << *pos << '\n';
         }
-  }
-  return pnt;
+    //////
+      // for (auto tr : indx){
+      //   std::cout << tr << '\n';
+      // }
+      }
+      row++;
+    } //if inside
+  }//for
+
+  return indaxes;
 }
 
 
@@ -97,7 +111,7 @@ int main( int argc, char** argv){
 
   image_window win, win_faces;
   array2d<rgb_pixel> img;
-  string fname1("Untitled Folder/face-straight1.jpg");
+  string fname1("Untitled Folder/avefac.jpg");
   // string fname1("Untitled Folder/face-straight1.jpg");
 
 
@@ -165,26 +179,40 @@ txtimage.convertTo(txtimage, CV_32FC3);
 txtimage = Scalar(1.0,1.0,1.0);
 
 
-std::vector< std::vector<Point> > pnt;
+std::vector< std::vector<int> > trIdx;
 
-pnt = triangulate_delaunay(txtimage, basePoints);
+//////////
+//
+// * apply triangulation to 68 vertices
+// * apply indices to the triangles
+//
 
-for(auto tri : pnt){
-  cout << tri << '\n';
-}
+std::vector<int> numbers(68);
+std::iota (std::begin(numbers), std::end(numbers), 1);
+
+
+// inpt = triangulate_delaunay(imgTr, trgPoints);
+trIdx = triangulate_delaunay(txtimage, basePoints);
+
+// for ( const auto &row : trIdx )
+// {
+//    for ( const auto &s : row ) std::cout << s << ' ';
+//    std::cout << std::endl;
+// }
+
+
+for (size_t i = 0; i < trIdx.size(); i++){
+
 
 std::vector<Point2f> inpt;
-inpt.push_back(trgPoints[37]);
-inpt.push_back(trgPoints[0]);
-inpt.push_back(trgPoints[3]);
+inpt.push_back(trgPoints[trIdx[i][0]]);
+inpt.push_back(trgPoints[trIdx[i][1]]);
+inpt.push_back(trgPoints[trIdx[i][2]]);
 std::vector<Point2f> outpt;
-outpt.push_back(basePoints[37]);
-outpt.push_back(basePoints[0]);
-outpt.push_back(basePoints[3]);
+outpt.push_back(basePoints[trIdx[i][0]]);
+outpt.push_back(basePoints[trIdx[i][1]]);
+outpt.push_back(basePoints[trIdx[i][2]]);
 
-
-
-// Rect r = boundingRect(midPt);
 Rect r1 = boundingRect(inpt);
 Rect r2 = boundingRect(outpt);
 
@@ -192,20 +220,16 @@ Rect r2 = boundingRect(outpt);
 //////
 std::vector<Point2f> t1Rect, t2Rect;
 std::vector<Point> tRectInt;
-for(int i = 0; i < 3; i++)
+for(int g = 0; g < 3; g++)
 {
 
-    t1Rect.push_back( Point2f( inpt[i].x - r1.x, inpt[i].y -  r1.y) ); //rect 1
-    t2Rect.push_back( Point2f( outpt[i].x - r2.x, outpt[i].y - r2.y) ); //rect2
-    tRectInt.push_back( Point((int)(outpt[i].x - r2.x), (int)(outpt[i].y - r2.y)) ); // for fillConvexPoly
+    t1Rect.push_back( Point2f( inpt[g].x - r1.x, inpt[g].y -  r1.y) ); //rect 1
+    t2Rect.push_back( Point2f( outpt[g].x - r2.x, outpt[g].y - r2.y) ); //rect2
+    tRectInt.push_back( Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y)) ); // for fillConvexPoly
 }////
 
 Mat img1Rect;
 imgTr(r1).copyTo(img1Rect);
-
-
-
-
 
 /////////////////////////
 // if (0 <= r2.x
@@ -240,9 +264,11 @@ multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
 
 txtimage(r2) = txtimage(r2) + img2Rect;
 
+}
+
 txtimage.convertTo(txtimage, CV_8UC3);
 
-// imwrite("save-texture.jpg", txtimage);
+imwrite("1sttexture.jpg", txtimage);
 imshow("Morphed Face", txtimage);
 
 
