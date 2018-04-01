@@ -82,10 +82,6 @@ std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Poin
         }else{
           std::cout << "not found:\t" << *pos << '\n';
         }
-    //////
-      // for (auto tr : indx){
-      //   std::cout << tr << '\n';
-      // }
       }
       row++;
     } //if inside
@@ -97,9 +93,6 @@ std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Poin
 
 int main( int argc, char** argv){
 
-  //set Width and Hight for an output picture
-  // int w = 600;
-  // int h = 600;
 
   //for boundary boxes
   //function returns object_detector
@@ -111,7 +104,8 @@ int main( int argc, char** argv){
 
   image_window win, win_faces;
   array2d<rgb_pixel> img;
-  string fname1("Untitled Folder/avefac.jpg");
+  // string fname1("Untitled Folder/avefac.jpg");
+  string fname1(argv[1]);
   // string fname1("Untitled Folder/face-straight1.jpg");
 
 
@@ -170,11 +164,13 @@ while(ifs >> q >> w){
 // Mat img1 = imread("fullface-texture.jpg");
 Mat imgTr = imread(fname1,1); //1 so read in all colors
 Mat outImg;
+Mat avepic = imgTr.clone();
 imgTr.convertTo(imgTr, CV_32FC3);
 
 // Output image is set to white
 Mat txtimage = imread("fullface-texture.jpg",1 );
 txtimage.convertTo(txtimage, CV_32FC3);
+
 // Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
 txtimage = Scalar(1.0,1.0,1.0);
 
@@ -191,7 +187,6 @@ std::vector<int> numbers(68);
 std::iota (std::begin(numbers), std::end(numbers), 1);
 
 
-// inpt = triangulate_delaunay(imgTr, trgPoints);
 trIdx = triangulate_delaunay(txtimage, basePoints);
 
 // for ( const auto &row : trIdx )
@@ -216,34 +211,29 @@ outpt.push_back(basePoints[trIdx[i][2]]);
 Rect r1 = boundingRect(inpt);
 Rect r2 = boundingRect(outpt);
 
+// std::cout << trIdx[i][0] << trIdx[i][1] << trIdx[i][2] << '\n';
 
-//////
+////// offsetting points be left top corner
 std::vector<Point2f> t1Rect, t2Rect;
 std::vector<Point> tRectInt;
+//used in tranformation, distance inside rect
 for(int g = 0; g < 3; g++)
 {
 
     t1Rect.push_back( Point2f( inpt[g].x - r1.x, inpt[g].y -  r1.y) ); //rect 1
     t2Rect.push_back( Point2f( outpt[g].x - r2.x, outpt[g].y - r2.y) ); //rect2
     tRectInt.push_back( Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y)) ); // for fillConvexPoly
+
+
 }////
 
 Mat img1Rect;
+//crop
 imgTr(r1).copyTo(img1Rect);
-
-/////////////////////////
-// if (0 <= r2.x
-//   && 0 <= r2.width
-//   && r2.x + r2.width <= txtimage.cols
-//   && 0 <= r2.y
-//   && 0 <= r2.height
-//   && r2.y + r2.height <= txtimage.rows){
-    // your code
-    /////////////////////
+//trasnformation for the shape inside the rectangular
 Mat warpMat = getAffineTransform( t1Rect, t2Rect );
-
-
 Mat img2Rect = Mat::zeros(r2.height, r2.width,img1Rect.type());
+
 
 warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
 
@@ -256,27 +246,98 @@ Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
 //Scalar to specify color intensity
 // 16 - line type
 /////////////////////////////
-fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0), 16, 0);
+//fill rect mask
+fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
 
-// apply traingl to the image
+
+
+// apply traingl to the image mask first
 multiply(img2Rect, mask, img2Rect);
 multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
 
 txtimage(r2) = txtimage(r2) + img2Rect;
 
+// if (trIdx[i][0] == 13 && trIdx[i][1] == 35) {
+//   txtimage.convertTo(txtimage, CV_8UC3);
+//
+//   imshow("triangle", txtimage(r2));
+//   txtimage.convertTo(txtimage, CV_32FC3);
+//
+//
+//   }
 }
 
-txtimage.convertTo(txtimage, CV_8UC3);
 
-imwrite("1sttexture.jpg", txtimage);
+float contrast = 0.78;
+int brightness = 41;
+// convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 )
+// - rtype - depth of the output image
+// m[i,j] = alfa * img[i,j] + beta
+txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
+
+
+
+/////////////////////////////////////
+std::vector<Point2f> outpt1;
+outpt1.push_back(trgPoints[15]);
+outpt1.push_back(trgPoints[53]);
+outpt1.push_back(trgPoints[35]);
+
+Rect r11 = boundingRect(outpt1);
+
+std::cout << avepic.type() << std::endl;
+
+// avepic.convertTo(avepic, CV_8U);
+
+std::vector<Point> tRectInt1;
+
+//used in tranformation, distance inside rect
+for(int g = 0; g < 3; g++)
+{
+  tRectInt1.push_back( Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y)) ); // for fillConvexPoly
+}////
+
+Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
+// Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
+
+fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
+
+Scalar average = mean(avepic(r11), mask1);
+
+Mat gg(avepic.height, avepic.width, CV_8UC3, average);
+
+Mat destination;
+gg.copyTo(destination,txtimage);
+
+
+// Mat Destination;
+// avepic(r11).copyTo(Destination,mask1);
+imshow("Destination",destination);
+
+// multiply(mask2, mask1, mask2);
+// multiply(avepic(r11), Scalar(1.0,1.0,1.0) - mask1, avepic(r11));
+// avepic(r11) = avepic(r11) + mask2;
+//
+// avepic.convertTo(avepic, CV_8UC3, contrast, brightness);
+
+imshow("txt",avepic(r11));
+
+
+// Scalar average = mean(avepic, mask1);
+//
+// std::cout << average << std::endl;
+
+//////////////////////
+//
+// cv::cvtColor(txtimage, txtimage, CV_BGR2YUV);
+// std::vector<cv::Mat> channels;
+// cv::split(txtimage, channels);
+// cv::equalizeHist(channels[0], channels[0]);
+// cv::merge(channels, txtimage);
+// cv::cvtColor(txtimage, txtimage, CV_YUV2BGR);
+
+// imwrite("file3-1.jpg", txtimage);
 imshow("Morphed Face", txtimage);
-
-
-// }
-// else{
-//     return -1;
-//   }
-
 
 ///////////////////////////
 
