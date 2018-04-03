@@ -24,6 +24,120 @@ using namespace std;
 
 
 //////////////////////////
+double distanceFound(Point2f first, Point2f second){
+  double dis = norm(first-second);
+  return dis;
+
+}
+
+Scalar skinTone(std::vector<Point2f> trgPoints, Mat avepic){
+  std::vector<Point2f> outpt1;
+  outpt1.push_back(trgPoints[15]);
+  outpt1.push_back(trgPoints[53]);
+  outpt1.push_back(trgPoints[35]);
+
+  Rect r11 = boundingRect(outpt1);
+
+  std::vector<Point> tRectInt1;
+
+  //used in tranformation, distance inside rect
+  for(int g = 0; g < 3; g++)
+  {
+    tRectInt1.push_back( Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y)) ); // for fillConvexPoly
+  }////
+
+  Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
+  // Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
+
+  fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
+
+  Scalar average = mean(avepic(r11), mask1);
+
+  return average;
+}
+//////////////////////////////////////
+
+static void applyFragment(std::vector<Point2f> inpt, std::vector<Point2f> outpt, Mat &txtimage, Mat imgTr){
+  Rect r1 = boundingRect(inpt);
+  Rect r2 = boundingRect(outpt);
+
+  // std::cout << trIdx[i][0] << trIdx[i][1] << trIdx[i][2] << '\n';
+
+  ////// offsetting points be left top corner
+  std::vector<Point2f> t1Rect, t2Rect;
+  std::vector<Point> tRectInt;
+  //used in tranformation, distance inside rect
+  for(int g = 0; g < 3; g++)
+  {
+
+      t1Rect.push_back( Point2f( inpt[g].x - r1.x, inpt[g].y -  r1.y) ); //rect 1
+      t2Rect.push_back( Point2f( outpt[g].x - r2.x, outpt[g].y - r2.y) ); //rect2
+      tRectInt.push_back( Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y)) ); // for fillConvexPoly
+
+
+  }////
+
+  Mat img1Rect;
+  //crop
+  imgTr(r1).copyTo(img1Rect);
+  //trasnformation for the shape inside the rectangular
+  Mat warpMat = getAffineTransform( t1Rect, t2Rect );
+  Mat img2Rect = Mat::zeros(r2.height, r2.width,img1Rect.type());
+
+
+  warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
+
+  // Get mask by filling triangle
+  Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
+
+  ////////////////////
+  //image - mask
+  //tRectInt  - cvertices
+  //Scalar to specify color intensity
+  // 16 - line type
+  /////////////////////////////
+  //fill rect mask
+  fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
+
+  // apply traingl to the image mask first
+  multiply(img2Rect, mask, img2Rect);
+  multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
+
+  txtimage(r2) = txtimage(r2) + img2Rect;
+}
+///////////////////
+
+Mat applySkinBg(Mat txtimage, std::vector<Point2f> basePoints, Scalar average){
+  std::vector<Point2f> hull;
+  std::vector<int> hullIdx;
+  std::vector<Point> hullfMask;
+  Mat maskHull = Mat::zeros(txtimage.rows, txtimage.cols, txtimage.depth());
+  Point center;
+
+  convexHull(basePoints, hullIdx, false, false);
+
+  for(int v = 0; v < hullIdx.size(); v++){
+    hull.push_back(basePoints[hullIdx[v]]);
+    //for mask
+    Point pt1(hull[v].x , hull[v].y);
+    hullfMask.push_back(pt1);
+
+
+  }
+
+  //Create mask1
+  fillConvexPoly(maskHull, &hullfMask[0], hullfMask.size(), Scalar(255,255,255));
+
+  //Clone seamlessly
+  Rect rHull = boundingRect(hull);
+  center = (rHull.tl() + rHull.br()) / 2;
+
+  Mat bgSkin(txtimage.rows, txtimage.cols, CV_8UC3, average);
+  Mat finalOutput;
+  seamlessClone(txtimage,bgSkin,maskHull,center,finalOutput, NORMAL_CLONE);
+  return finalOutput;
+
+}
 
 std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Point2f> &basePoints){
   // Keep a copy around
@@ -160,20 +274,23 @@ while(ifs >> q >> w){
 // * transfer each fragment triangle to certain location
 
 //////////////////////////////////////////
-//Traingulate
-// Mat img1 = imread("fullface-texture.jpg");
+
 Mat imgTr = imread(fname1,1); //1 so read in all colors
-Mat outImg;
-Mat avepic = imgTr.clone();
+//detect skin tone by mean calculation
+Scalar average = skinTone(trgPoints, imgTr);
 imgTr.convertTo(imgTr, CV_32FC3);
 
 // Output image is set to white
 Mat txtimage = imread("fullface-texture.jpg",1 );
+
+//////////////////////////////////////
+// CONVEX HULL
+
+////////////////////
+
 txtimage.convertTo(txtimage, CV_32FC3);
-
 // Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
-txtimage = Scalar(1.0,1.0,1.0);
-
+// txtimage = Scalar(1.0,1.0,1.0);
 
 std::vector< std::vector<int> > trIdx;
 
@@ -184,6 +301,7 @@ std::vector< std::vector<int> > trIdx;
 //
 
 std::vector<int> numbers(68);
+//fill with 1s
 std::iota (std::begin(numbers), std::end(numbers), 1);
 
 
@@ -196,75 +314,23 @@ trIdx = triangulate_delaunay(txtimage, basePoints);
 // }
 
 
+
+
 for (size_t i = 0; i < trIdx.size(); i++){
 
 
-std::vector<Point2f> inpt;
-inpt.push_back(trgPoints[trIdx[i][0]]);
-inpt.push_back(trgPoints[trIdx[i][1]]);
-inpt.push_back(trgPoints[trIdx[i][2]]);
-std::vector<Point2f> outpt;
-outpt.push_back(basePoints[trIdx[i][0]]);
-outpt.push_back(basePoints[trIdx[i][1]]);
-outpt.push_back(basePoints[trIdx[i][2]]);
+  std::vector<Point2f> inpt;
+  inpt.push_back(trgPoints[trIdx[i][0]]);
+  inpt.push_back(trgPoints[trIdx[i][1]]);
+  inpt.push_back(trgPoints[trIdx[i][2]]);
+  std::vector<Point2f> outpt;
+  outpt.push_back(basePoints[trIdx[i][0]]);
+  outpt.push_back(basePoints[trIdx[i][1]]);
+  outpt.push_back(basePoints[trIdx[i][2]]);
 
-Rect r1 = boundingRect(inpt);
-Rect r2 = boundingRect(outpt);
-
-// std::cout << trIdx[i][0] << trIdx[i][1] << trIdx[i][2] << '\n';
-
-////// offsetting points be left top corner
-std::vector<Point2f> t1Rect, t2Rect;
-std::vector<Point> tRectInt;
-//used in tranformation, distance inside rect
-for(int g = 0; g < 3; g++)
-{
-
-    t1Rect.push_back( Point2f( inpt[g].x - r1.x, inpt[g].y -  r1.y) ); //rect 1
-    t2Rect.push_back( Point2f( outpt[g].x - r2.x, outpt[g].y - r2.y) ); //rect2
-    tRectInt.push_back( Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y)) ); // for fillConvexPoly
+  applyFragment(inpt, outpt, txtimage, imgTr);
 
 
-}////
-
-Mat img1Rect;
-//crop
-imgTr(r1).copyTo(img1Rect);
-//trasnformation for the shape inside the rectangular
-Mat warpMat = getAffineTransform( t1Rect, t2Rect );
-Mat img2Rect = Mat::zeros(r2.height, r2.width,img1Rect.type());
-
-
-warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
-
-// Get mask by filling triangle
-Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
-
-////////////////////
-//image - mask
-//tRectInt  - cvertices
-//Scalar to specify color intensity
-// 16 - line type
-/////////////////////////////
-//fill rect mask
-fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
-
-
-
-// apply traingl to the image mask first
-multiply(img2Rect, mask, img2Rect);
-multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
-
-txtimage(r2) = txtimage(r2) + img2Rect;
-
-// if (trIdx[i][0] == 13 && trIdx[i][1] == 35) {
-//   txtimage.convertTo(txtimage, CV_8UC3);
-//
-//   imshow("triangle", txtimage(r2));
-//   txtimage.convertTo(txtimage, CV_32FC3);
-//
-//
-//   }
 }
 
 
@@ -277,81 +343,17 @@ txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
 
 
 
-/////////////////////////////////////
-std::vector<Point2f> outpt1;
-outpt1.push_back(trgPoints[15]);
-outpt1.push_back(trgPoints[53]);
-outpt1.push_back(trgPoints[35]);
+// CLONE SEAMLESSLY
+Mat finalOt = applySkinBg(txtimage, basePoints, average);
 
-Rect r11 = boundingRect(outpt1);
+imshow("Let's see", finalOt);
 
-std::cout << avepic.type() << std::endl;
-
-// avepic.convertTo(avepic, CV_8U);
-
-std::vector<Point> tRectInt1;
-
-//used in tranformation, distance inside rect
-for(int g = 0; g < 3; g++)
-{
-  tRectInt1.push_back( Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y)) ); // for fillConvexPoly
-}////
-
-Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
-// Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
-
-fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
-
-Scalar average = mean(avepic(r11), mask1);
-
-Mat gg(avepic.height, avepic.width, CV_8UC3, average);
-
-Mat destination;
-gg.copyTo(destination,txtimage);
-
-
-// Mat Destination;
-// avepic(r11).copyTo(Destination,mask1);
-imshow("Destination",destination);
-
-// multiply(mask2, mask1, mask2);
-// multiply(avepic(r11), Scalar(1.0,1.0,1.0) - mask1, avepic(r11));
-// avepic(r11) = avepic(r11) + mask2;
-//
-// avepic.convertTo(avepic, CV_8UC3, contrast, brightness);
-
-imshow("txt",avepic(r11));
-
-
-// Scalar average = mean(avepic, mask1);
-//
-// std::cout << average << std::endl;
-
-//////////////////////
-//
-// cv::cvtColor(txtimage, txtimage, CV_BGR2YUV);
-// std::vector<cv::Mat> channels;
-// cv::split(txtimage, channels);
-// cv::equalizeHist(channels[0], channels[0]);
-// cv::merge(channels, txtimage);
-// cv::cvtColor(txtimage, txtimage, CV_YUV2BGR);
+////////////////////////////
 
 // imwrite("file3-1.jpg", txtimage);
 imshow("Morphed Face", txtimage);
 
 ///////////////////////////
-
-//
-// // render face to a window
-// win.clear_overlay();
-// win.set_image(img);
-// //show face landmark
-// win.add_overlay(render_face_detections(ws));
-//
-// // crop face *don't need for now
-// dlib::array2d<rgb_pixel> face_chip;
-// extract_image_chip(img, get_face_chip_details(ws), face_chip);
-// win_faces.set_image(face_chip);
 
  // cin.get();
  waitKey(0);
