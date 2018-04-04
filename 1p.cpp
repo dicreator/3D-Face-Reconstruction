@@ -30,6 +30,22 @@ double distanceFound(Point2f first, Point2f second){
 
 }
 
+Point2d pointAbove(Point2f first, Point2f second){
+  Point2f midPnt = Point2f((first.x+second.x)/2,(first.y+second.y)/2);
+
+  double gradientPerp = (second.x-first.x)/(second.y-second.x);
+
+  Point2f pntAbove;
+
+
+  pntAbove.y = midPnt.y - distanceFound(first,second) * 1.4;
+
+
+
+  pntAbove.x = ((pntAbove.y - midPnt.y)/gradientPerp) + midPnt.x;
+  return pntAbove;
+}
+
 Scalar skinTone(std::vector<Point2f> trgPoints, Mat avepic){
   std::vector<Point2f> outpt1;
   outpt1.push_back(trgPoints[15]);
@@ -125,8 +141,8 @@ Mat applySkinBg(Mat txtimage, std::vector<Point2f> basePoints, Scalar average){
 
   }
 
-  //Create mask1
-  fillConvexPoly(maskHull, &hullfMask[0], hullfMask.size(), Scalar(255,255,255));
+//Create mask1
+fillConvexPoly(maskHull, &hullfMask[0], hullfMask.size(), Scalar(255,255,255));
 
   //Clone seamlessly
   Rect rHull = boundingRect(hull);
@@ -243,16 +259,17 @@ if (dets.size() == 0 || dets.size() > 1) {
 // std::vector<full_object_detection> shape;
 full_object_detection ws = fshape(img,dets[0]);
 cout << "number of parts: "<< ws.num_parts() << endl;
-cout << "pixel position of first part:  " << ws.part(0) << endl;
-cout << "pixel position of second part: " << ws.part(67) << endl;
+
 // shape.push_back(ws);
 
 std::vector<Point2f> trgPoints;
 for(size_t i = 0; i < ws.num_parts(); i++){
   trgPoints.push_back(Point2f(ws.part(i)(0), ws.part(i)(1)));
 }
-
-
+cout << "pixel position of first part:  " << trgPoints[18] << endl;
+cout << "pixel position of second part: " << trgPoints[19] << endl;
+Point2f tt = pointAbove(trgPoints[18], trgPoints[19]);
+std::cout << tt<< '\n';
 /////////////////////////////////////////
 //SUBDIV
 
@@ -283,11 +300,6 @@ imgTr.convertTo(imgTr, CV_32FC3);
 // Output image is set to white
 Mat txtimage = imread("fullface-texture.jpg",1 );
 
-//////////////////////////////////////
-// CONVEX HULL
-
-////////////////////
-
 txtimage.convertTo(txtimage, CV_32FC3);
 // Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
 // txtimage = Scalar(1.0,1.0,1.0);
@@ -307,17 +319,10 @@ std::iota (std::begin(numbers), std::end(numbers), 1);
 
 trIdx = triangulate_delaunay(txtimage, basePoints);
 
-// for ( const auto &row : trIdx )
-// {
-//    for ( const auto &s : row ) std::cout << s << ' ';
-//    std::cout << std::endl;
-// }
-
 
 
 
 for (size_t i = 0; i < trIdx.size(); i++){
-
 
   std::vector<Point2f> inpt;
   inpt.push_back(trgPoints[trIdx[i][0]]);
@@ -330,7 +335,6 @@ for (size_t i = 0; i < trIdx.size(); i++){
 
   applyFragment(inpt, outpt, txtimage, imgTr);
 
-
 }
 
 
@@ -341,8 +345,6 @@ int brightness = 41;
 // m[i,j] = alfa * img[i,j] + beta
 txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
 
-
-
 // CLONE SEAMLESSLY
 Mat finalOt = applySkinBg(txtimage, basePoints, average);
 
@@ -350,7 +352,7 @@ imshow("Let's see", finalOt);
 
 ////////////////////////////
 
-// imwrite("file3-1.jpg", txtimage);
+imwrite("final1.jpg", finalOt);
 imshow("Morphed Face", txtimage);
 
 ///////////////////////////
