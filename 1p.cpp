@@ -1,10 +1,13 @@
 
 #include <opencv2/opencv.hpp>
+#include <sys/stat.h>
 #include <iostream>
 #include <fstream>
 #include <dirent.h>
 #include <stdlib.h>
 #include <algorithm>
+#include <string>
+#include <sstream>
 #include <vector>
 //
 #include <dlib/image_processing/frontal_face_detector.h>
@@ -24,33 +27,52 @@ using namespace std;
 
 
 //////////////////////////
-double distanceFound(Point2f first, Point2f second){
+static double distanceFound(Point2f first, Point2f second){
   double dis = norm(first-second);
   return dis;
 
 }
 
-Point2d pointAbove(Point2f first, Point2f second){
-  Point2f midPnt = Point2f((first.x+second.x)/2,(first.y+second.y)/2);
+//27 30
+static void pointAbove(std::vector<Point2f> &trgPoints){
 
-  double gradientPerp = (second.x-first.x)/(second.y-second.x);
+  Point2f first = trgPoints[27];
+  Point2f second = trgPoints[30];
+  std::cout << first << '\n';
+  std::cout << second << '\n';
 
-  Point2f pntAbove;
+  Point2f topPoint = Point2f(first.x - (second.x-first.x)*0.8,first.y- (second.y-first.y)*0.8);
 
 
-  pntAbove.y = midPnt.y - distanceFound(first,second) * 1.4;
+  double gradientPerp = -1 / ((second.y-first.y)/(second.x-first.x));
+  std::cout << gradientPerp << '\n';
 
 
+  Point2f pntAboveL;
+  Point2f pntAboveR;
 
-  pntAbove.x = ((pntAbove.y - midPnt.y)/gradientPerp) + midPnt.x;
-  return pntAbove;
+  pntAboveL.x = topPoint.x - (second.y-first.y)*0.4;
+  pntAboveR.x = topPoint.x + (second.y-first.y)*0.4;
+
+  pntAboveL.y = (gradientPerp * (pntAboveL.x - topPoint.x)) + topPoint.y;
+  pntAboveR.y = (gradientPerp * (pntAboveR.x - topPoint.x)) + topPoint.y;
+
+  //add points
+  trgPoints.push_back(pntAboveL);
+  trgPoints.push_back(topPoint);
+  trgPoints.push_back(pntAboveR);
+
+  std::cout << pntAboveL << '\n';
+  std::cout << topPoint << '\n';
+  std::cout << pntAboveR << '\n';
+
 }
 
 Scalar skinTone(std::vector<Point2f> trgPoints, Mat avepic){
   std::vector<Point2f> outpt1;
-  outpt1.push_back(trgPoints[15]);
-  outpt1.push_back(trgPoints[53]);
-  outpt1.push_back(trgPoints[35]);
+  outpt1.push_back(trgPoints[69]);
+  outpt1.push_back(trgPoints[24]);
+  outpt1.push_back(trgPoints[19]);
 
   Rect r11 = boundingRect(outpt1);
 
@@ -220,7 +242,12 @@ std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Poin
   return indaxes;
 }
 
-
+static void makeCopy( const char* src, string dst )
+{
+    std::ifstream srce( src, std::ios::binary ) ;
+    std::ofstream dest( dst, std::ios::binary ) ;
+    dest << srce.rdbuf() ;
+}
 int main( int argc, char** argv){
 
 
@@ -266,10 +293,22 @@ std::vector<Point2f> trgPoints;
 for(size_t i = 0; i < ws.num_parts(); i++){
   trgPoints.push_back(Point2f(ws.part(i)(0), ws.part(i)(1)));
 }
-cout << "pixel position of first part:  " << trgPoints[18] << endl;
-cout << "pixel position of second part: " << trgPoints[19] << endl;
-Point2f tt = pointAbove(trgPoints[18], trgPoints[19]);
-std::cout << tt<< '\n';
+pointAbove(trgPoints);
+
+cout << "pixel position of second part: " << trgPoints[68] << endl;
+cout << "pixel position of second part: " << trgPoints[69] << endl;
+
+cout << "pixel position of second part: " << trgPoints[70] << endl;
+cout << "pixel position of second part: " << trgPoints.size()<< endl;
+
+//Adjust eeyebrow vertices
+// trgPoints[17].x -= 3;
+// trgPoints[17].y -= 5;
+//
+// trgPoints[26].x += 3;
+// trgPoints[26].y -= 5;
+
+
 /////////////////////////////////////////
 //SUBDIV
 
@@ -286,6 +325,10 @@ while(ifs >> q >> w){
   basePoints.push_back(Point2f(q, w));
 }
 
+basePoints.push_back(Point2f(325,140));
+basePoints.push_back(Point2f(512,134));
+basePoints.push_back(Point2f(699,140));
+
 
 // * split pic into triangles
 // * transfer each fragment triangle to certain location
@@ -295,14 +338,23 @@ while(ifs >> q >> w){
 Mat imgTr = imread(fname1,1); //1 so read in all colors
 //detect skin tone by mean calculation
 Scalar average = skinTone(trgPoints, imgTr);
-imgTr.convertTo(imgTr, CV_32FC3);
+////////
+// Calculate brightness and contrast
+// double min, max;
+// minMaxLoc(imgTr, &min, &max);
+// std::cout << min << max << '\n';
+// double brightness = 255/(max- min);
+// double contrast = -min * brightness;
+// std::cout << "ll "<< min << max << '\n';
 
+
+imgTr.convertTo(imgTr, CV_32FC3);
 // Output image is set to white
-Mat txtimage = imread("fullface-texture.jpg",1 );
+// Mat txtimage = imread("fullface-texture.jpg",1 );
+Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
+txtimage = Scalar(average);
 
 txtimage.convertTo(txtimage, CV_32FC3);
-// Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
-// txtimage = Scalar(1.0,1.0,1.0);
 
 std::vector< std::vector<int> > trIdx;
 
@@ -312,15 +364,14 @@ std::vector< std::vector<int> > trIdx;
 // * apply indices to the triangles
 //
 
-std::vector<int> numbers(68);
-//fill with 1s
-std::iota (std::begin(numbers), std::end(numbers), 1);
-
 
 trIdx = triangulate_delaunay(txtimage, basePoints);
 
 
-
+// basePoints[68] = Point2f(184,74);
+// basePoints[69] = Point2f(512,38);
+// basePoints[70] = Point2f(840,74);
+cout << "pixel position of first part:  " << basePoints[70] << endl;
 
 for (size_t i = 0; i < trIdx.size(); i++){
 
@@ -338,22 +389,163 @@ for (size_t i = 0; i < trIdx.size(); i++){
 }
 
 
-float contrast = 0.78;
-int brightness = 41;
+
 // convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 )
 // - rtype - depth of the output image
 // m[i,j] = alfa * img[i,j] + beta
+float contrast = 0.78;
+int brightness = 41;
 txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
+
+//txtimage.convertTo(txtimage, CV_8UC3);
+
 
 // CLONE SEAMLESSLY
 Mat finalOt = applySkinBg(txtimage, basePoints, average);
 
+size_t dotIndex = fname1.find_last_of(".");
+
+string OtFiles = fname1.substr(0, dotIndex);
+string objName =  OtFiles +".obj";
+makeCopy("files/orgFace.obj", objName);
+// makeCopy("files/orgFace.mtl", "WW.obj");
+
+//distance
+// 659.303
+// 647.341
+// 624.424
+// 607.474
+// 562.43
+// 462.351
+// 321.263
+// 169.145
+
+// 27.4734
+std::cout << "/* message */" << '\n';
+double ratio = distanceFound(trgPoints[0], trgPoints[16])/27.4734; //decrease ratio
+// double ratio = distanceFound(trgPoints[0], trgPoints[16])/12;
+std::cout << ratio << '\n';
+
+
+
+std::vector<Point> faceLength;
+ifstream ist("tpoints.txt");
+int s, d;
+while(ist >> s >> d){
+  faceLength.push_back(Point(s, d));
+}
+
+std::cout << faceLength.size() << '\n';
+int tempT;
+int tempY;
+string typeInObj;
+float locationX;
+double poisitionOne;
+double poisitionTwo;
+double changeLengthOne;
+
+
+for (size_t i = 0; i < 15; i++){
+
+  int track = 0;
+// good way cuz it copies exactly and even commenting
+// rather than storing and printing.
+// doesn't change anything else except of vertices.
+
+  ifstream objst("orgFaceD.obj");
+  ofstream objOt("test.obj");
+  string readout;
+
+  //read Calculate
+  while(getline(objst, readout)){
+
+    if(i != 0){
+      if(track == tempT){
+        istringstream iss(readout);
+        std::vector<string> tokens{istream_iterator<string>{iss},
+                        istream_iterator<string>{}};
+
+        double newNumber = atof(tokens[1].c_str());
+        std::cout << "Wrote left side" << newNumber << '\n';
+
+        tokens[0] += ' ';
+        newNumber -= changeLengthOne;
+        objOt << tokens[0] << ' ' << newNumber <<  ' ' << tokens[2] <<  ' ' << tokens[3] << '\n';
+
+      }else if(track == tempY){
+        istringstream iss(readout);
+        std::vector<string> tokens{istream_iterator<string>{iss},
+                        istream_iterator<string>{}};
+
+        double newNumber = atof(tokens[1].c_str());
+
+        newNumber += changeLengthOne;
+        tokens[0] += ' ';
+        objOt << tokens[0] << ' ' << newNumber <<  ' ' << tokens[2] <<  ' ' << tokens[3] << '\n';
+
+      }else{
+        objOt << readout << '\n';
+      }
+    }else{
+      objOt << readout << '\n';
+    }
+
+    if(i < 14){
+      if(track == faceLength[i].x){
+        std::cout << "Left gotten" << '\n';
+        istringstream iss(readout);
+        std::vector<string> tokens{istream_iterator<string>{iss},
+                        istream_iterator<string>{}};
+        poisitionOne = atof(tokens[1].c_str());
+      }else if(track == faceLength[i].y){
+        istringstream iss(readout);
+        std::vector<string> tokens{istream_iterator<string>{iss},
+                        istream_iterator<string>{}};
+        poisitionTwo = atof(tokens[1].c_str());
+
+      }
+      if(track == 294){
+        changeLengthOne = ((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne))/4;
+        std::cout << changeLengthOne << '\n';
+
+        tempT = faceLength[i].x;
+        tempY = faceLength[i].y;
+
+      }
+    }
+    ///////CALCULATE
+    track++;
+  }
+
+  //read write
+}
+
+
+// std::cout << "/* message */" << '\n';
+// for (int i = 0; i<8; i++){
+//   double dist = distanceFound(trgPoints[i], trgPoints[16-i]);
+//
+//   std::cout << dist << '\n';
+// }
+
+//////////////////MAKE FOLDER
+//
+// const int dir_err = mkdir("foo", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+// if (-1 == dir_err)
+// {
+//     printf("Error creating directory!n");
+//     exit(1);
+// }
+
+
+
 imshow("Let's see", finalOt);
+//imwrite(OtFiles.append("Texture.jpg"), finalOt);
 
 ////////////////////////////
 
-imwrite("final1.jpg", finalOt);
 imshow("Morphed Face", txtimage);
+//imwrite("final3.jpg", txtimage);
 
 ///////////////////////////
 
