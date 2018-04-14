@@ -444,81 +444,88 @@ double poisitionOne;
 double poisitionTwo;
 double changeLengthOne;
 
+std::vector<string> verticesObj;
+string readline;
+int track = 0;
 
-for (size_t i = 0; i < 15; i++){
+ifstream objst("orgFaceD.obj");
 
-  int track = 0;
+while (getline(objst, readline)) {
+  if (track != 0 && track <= 294){
+    verticesObj.push_back(readline);
+  }else if(track > 294){break;}
+  track++;
+}
+
+for (size_t i = 0; i < 14; i++){
+
 // good way cuz it copies exactly and even commenting
 // rather than storing and printing.
 // doesn't change anything else except of vertices.
 
-  ifstream objst("orgFaceD.obj");
-  ofstream objOt("test.obj");
-  string readout;
 
-  //read Calculate
-  while(getline(objst, readout)){
 
-    if(i != 0){
-      if(track == tempT){
-        istringstream iss(readout);
-        std::vector<string> tokens{istream_iterator<string>{iss},
-                        istream_iterator<string>{}};
 
-        double newNumber = atof(tokens[1].c_str());
-        std::cout << "Wrote left side" << newNumber << '\n';
 
-        tokens[0] += ' ';
-        newNumber -= changeLengthOne;
-        objOt << tokens[0] << ' ' << newNumber <<  ' ' << tokens[2] <<  ' ' << tokens[3] << '\n';
+      istringstream iss1(verticesObj[faceLength[i].x-1]);
+      std::vector<string> tokens1{istream_iterator<string>{iss1},
+                      istream_iterator<string>{}};
+      poisitionOne = atof(tokens1[1].c_str());
 
-      }else if(track == tempY){
-        istringstream iss(readout);
-        std::vector<string> tokens{istream_iterator<string>{iss},
-                        istream_iterator<string>{}};
+      istringstream iss2(verticesObj[faceLength[i].y-1]);
+      std::vector<string> tokens2{istream_iterator<string>{iss2},
+                      istream_iterator<string>{}};
+      poisitionTwo = atof(tokens2[1].c_str());
 
-        double newNumber = atof(tokens[1].c_str());
+      tokens1[0] += ' ';
+      tokens2[0] += ' ';
 
-        newNumber += changeLengthOne;
-        tokens[0] += ' ';
-        objOt << tokens[0] << ' ' << newNumber <<  ' ' << tokens[2] <<  ' ' << tokens[3] << '\n';
 
-      }else{
-        objOt << readout << '\n';
+
+      changeLengthOne = round(((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne)) *10000/40000);
+
+      //write
+
+      poisitionOne -= changeLengthOne;
+
+      poisitionTwo += changeLengthOne;
+
+      tokens1[1] = to_string(poisitionOne);
+      tokens2[1] = to_string(poisitionTwo);
+
+      tokens1[1].pop_back();
+      tokens1[1].pop_back();
+      tokens2[1].pop_back();
+      tokens2[1].pop_back();
+      // tokens1[1].substr(0, tokens1[1].size()-2);
+      // tokens2[1].substr(0, tokens2[1].size()-2);
+
+      for(int i = 0; i < 3; i++){
+        tokens1[i] += ' ';
+        tokens2[i] += ' ';
       }
-    }else{
-      objOt << readout << '\n';
-    }
 
-    if(i < 14){
-      if(track == faceLength[i].x){
-        std::cout << "Left gotten" << '\n';
-        istringstream iss(readout);
-        std::vector<string> tokens{istream_iterator<string>{iss},
-                        istream_iterator<string>{}};
-        poisitionOne = atof(tokens[1].c_str());
-      }else if(track == faceLength[i].y){
-        istringstream iss(readout);
-        std::vector<string> tokens{istream_iterator<string>{iss},
-                        istream_iterator<string>{}};
-        poisitionTwo = atof(tokens[1].c_str());
+      verticesObj[faceLength[i].x-1] = accumulate(tokens1.begin(), tokens1.end(), string(""));
+      verticesObj[faceLength[i].y-1] = accumulate(tokens2.begin(), tokens2.end(), string(""));
 
-      }
-      if(track == 294){
-        changeLengthOne = ((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne))/4;
-        std::cout << changeLengthOne << '\n';
-
-        tempT = faceLength[i].x;
-        tempY = faceLength[i].y;
-
-      }
-    }
-    ///////CALCULATE
-    track++;
-  }
-
-  //read write
+  //read te
 }
+
+// ifstream objst1("orgFaceD.obj");
+ofstream objOt("test.obj");
+string readout;
+
+int track1 = 0;
+for (int i = 0; i < 294; i++){
+  objOt << verticesObj[i] << '\n';
+
+}
+while (getline(objst, readline)) {
+  objOt << readline << '\n';
+
+}
+
+
 
 
 // std::cout << "/* message */" << '\n';
