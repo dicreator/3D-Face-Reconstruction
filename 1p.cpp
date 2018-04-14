@@ -407,7 +407,8 @@ size_t dotIndex = fname1.find_last_of(".");
 
 string OtFiles = fname1.substr(0, dotIndex);
 string objName =  OtFiles +".obj";
-makeCopy("files/orgFace.obj", objName);
+
+// makeCopy("files/orgFace.obj", objName);
 // makeCopy("files/orgFace.mtl", "WW.obj");
 
 //distance
@@ -457,6 +458,7 @@ while (getline(objst, readline)) {
   track++;
 }
 
+
 for (size_t i = 0; i < 14; i++){
 
 // good way cuz it copies exactly and even commenting
@@ -482,10 +484,10 @@ for (size_t i = 0; i < 14; i++){
 
 
 
-      changeLengthOne = round(((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne)) *10000/40000);
+      changeLengthOne = ((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne)) /4;
 
       //write
-
+      std::cout << changeLengthOne << '\n';
       poisitionOne -= changeLengthOne;
 
       poisitionTwo += changeLengthOne;
@@ -493,10 +495,10 @@ for (size_t i = 0; i < 14; i++){
       tokens1[1] = to_string(poisitionOne);
       tokens2[1] = to_string(poisitionTwo);
 
-      tokens1[1].pop_back();
-      tokens1[1].pop_back();
-      tokens2[1].pop_back();
-      tokens2[1].pop_back();
+      // tokens1[1].pop_back();
+      // tokens1[1].pop_back();
+      // tokens2[1].pop_back();
+      // tokens2[1].pop_back();
       // tokens1[1].substr(0, tokens1[1].size()-2);
       // tokens2[1].substr(0, tokens2[1].size()-2);
 
@@ -511,20 +513,27 @@ for (size_t i = 0; i < 14; i++){
   //read te
 }
 
-// ifstream objst1("orgFaceD.obj");
-ofstream objOt("test.obj");
+ifstream objst1("orgFaceD.obj");
+ofstream objOt(OtFiles +".obj");
+
+track = 0;
+// for (int i = 0; i < 294; i++){
+//   objOt << verticesObj[i] << '\n';
+//
+// }
 string readout;
+while(!objst1.eof())
+    {
+        std::getline(objst1, readout);
+        if(track == 0 || track > 294){
+          objOt << readout << '\n';
+          objOt.flush();
 
-int track1 = 0;
-for (int i = 0; i < 294; i++){
-  objOt << verticesObj[i] << '\n';
-
+        }else{
+            objOt << verticesObj[track-1] << '\n';
+        }
+  track++;
 }
-while (getline(objst, readline)) {
-  objOt << readline << '\n';
-
-}
-
 
 
 
