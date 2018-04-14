@@ -513,6 +513,31 @@ for (size_t i = 0; i < 14; i++){
   //read te
 }
 
+string textureFname = OtFiles + "Texture.jpg";
+imwrite(textureFname, finalOt);
+
+
+ifstream mtlst("orgFaceD.mtl");
+ofstream mtlOt(OtFiles +".mtl");
+track = 0;
+
+string writeMtl;
+while(getline(mtlst, writeMtl))
+    {
+      if(track < 11){
+        std::cout << track << '\n';
+        mtlOt << writeMtl << '\n';
+      }else{
+          mtlOt << "  " << "map_Ka "<< textureFname << '\n';
+          mtlOt << "  " << "map_Kd "<< textureFname << '\n';
+          mtlOt.flush();
+          break;
+      }
+  track++;
+}
+
+
+
 ifstream objst1("orgFaceD.obj");
 ofstream objOt(OtFiles +".obj");
 
@@ -556,7 +581,6 @@ while(!objst1.eof())
 
 
 imshow("Let's see", finalOt);
-//imwrite(OtFiles.append("Texture.jpg"), finalOt);
 
 ////////////////////////////
 
