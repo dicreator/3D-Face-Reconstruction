@@ -27,464 +27,439 @@ using namespace std;
 
 
 //////////////////////////
-static double distanceFound(Point2f first, Point2f second){
-  double dis = norm(first-second);
-  return dis;
+static double distanceFound(Point2f first, Point2f second) {
+   double dis = norm(first - second);
+   return dis;
 
 }
 
 //27 30
-static void pointAbove(std::vector<Point2f> &trgPoints){
+static void pointAbove(std::vector < Point2f > & trgPoints) {
 
-  Point2f first = trgPoints[27];
-  Point2f second = trgPoints[30];
-  std::cout << first << '\n';
-  std::cout << second << '\n';
+   Point2f first = trgPoints[27];
+   Point2f second = trgPoints[30];
 
-  Point2f topPoint = Point2f(first.x - (second.x-first.x)*0.8,first.y- (second.y-first.y)*0.8);
+   Point2f topPoint = Point2f(first.x - (second.x - first.x) * 0.8, first.y - (second.y - first.y) * 0.8);
+
+   double gradientPerp = -1 / ((second.y - first.y) / (second.x - first.x));
+
+   Point2f pntAboveL;
+   Point2f pntAboveR;
+
+   pntAboveL.x = topPoint.x - (second.y - first.y) * 0.4;
+   pntAboveR.x = topPoint.x + (second.y - first.y) * 0.4;
+
+   pntAboveL.y = (gradientPerp * (pntAboveL.x - topPoint.x)) + topPoint.y;
+   pntAboveR.y = (gradientPerp * (pntAboveR.x - topPoint.x)) + topPoint.y;
+
+   //add points
+   trgPoints.push_back(pntAboveL);
+   trgPoints.push_back(topPoint);
+   trgPoints.push_back(pntAboveR);
+}
+
+Scalar skinTone(std::vector < Point2f > trgPoints, Mat avepic) {
+      std::vector < Point2f > outpt1;
+      outpt1.push_back(trgPoints[69]);
+      outpt1.push_back(trgPoints[24]);
+      outpt1.push_back(trgPoints[19]);
+
+      Rect r11 = boundingRect(outpt1);
+
+      std::vector < Point > tRectInt1;
+
+      //used in tranformation, distance inside rect
+      for (int g = 0; g < 3; g++) {
+         tRectInt1.push_back(Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y))); // for fillConvexPoly
+      } ////
+
+      Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
+      // Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
+
+      fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
+
+      Scalar average = mean(avepic(r11), mask1);
+
+      return average;
+   }
+   //////////////////////////////////////
+
+static void applyFragment(std::vector < Point2f > inpt, std::vector < Point2f > outpt, Mat & txtimage, Mat imgTr) {
+      Rect r1 = boundingRect(inpt);
+      Rect r2 = boundingRect(outpt);
 
 
-  double gradientPerp = -1 / ((second.y-first.y)/(second.x-first.x));
-  std::cout << gradientPerp << '\n';
+      ////// offsetting points be left top corner
+      std::vector < Point2f > t1Rect, t2Rect;
+      std::vector < Point > tRectInt;
+      //used in tranformation, distance inside rect
+      for (int g = 0; g < 3; g++) {
 
+         t1Rect.push_back(Point2f(inpt[g].x - r1.x, inpt[g].y - r1.y)); //rect 1
+         t2Rect.push_back(Point2f(outpt[g].x - r2.x, outpt[g].y - r2.y)); //rect2
+         tRectInt.push_back(Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y))); // for fillConvexPoly
 
-  Point2f pntAboveL;
-  Point2f pntAboveR;
+      } ////
 
-  pntAboveL.x = topPoint.x - (second.y-first.y)*0.4;
-  pntAboveR.x = topPoint.x + (second.y-first.y)*0.4;
+      Mat img1Rect;
+      //crop
+      imgTr(r1).copyTo(img1Rect);
+      //trasnformation for the shape inside the rectangular
+      Mat warpMat = getAffineTransform(t1Rect, t2Rect);
+      Mat img2Rect = Mat::zeros(r2.height, r2.width, img1Rect.type());
 
-  pntAboveL.y = (gradientPerp * (pntAboveL.x - topPoint.x)) + topPoint.y;
-  pntAboveR.y = (gradientPerp * (pntAboveR.x - topPoint.x)) + topPoint.y;
+      warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
 
-  //add points
-  trgPoints.push_back(pntAboveL);
-  trgPoints.push_back(topPoint);
-  trgPoints.push_back(pntAboveR);
+      // Get mask by filling triangle
+      Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
 
-  std::cout << pntAboveL << '\n';
-  std::cout << topPoint << '\n';
-  std::cout << pntAboveR << '\n';
+      ////////////////////
+      //image - mask
+      //tRectInt  - cvertices
+      //Scalar to specify color intensity
+      // 16 - line type
+      /////////////////////////////
+      //fill rect mask
+      fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
+
+      // apply traingl to the image mask first
+      multiply(img2Rect, mask, img2Rect);
+      multiply(txtimage(r2), Scalar(1.0, 1.0, 1.0) - mask, txtimage(r2));
+
+      txtimage(r2) = txtimage(r2) + img2Rect;
+   }
+   ///////////////////
+
+Mat applySkinBg(Mat txtimage, std::vector < Point2f > basePoints, Scalar average) {
+   std::vector < Point2f > hull;
+   std::vector < int > hullIdx;
+   std::vector < Point > hullfMask;
+   Mat maskHull = Mat::zeros(txtimage.rows, txtimage.cols, txtimage.depth());
+   Point center;
+
+   convexHull(basePoints, hullIdx, false, false);
+
+   for (int v = 0; v < hullIdx.size(); v++) {
+      hull.push_back(basePoints[hullIdx[v]]);
+      //for mask
+      Point pt1(hull[v].x, hull[v].y);
+      hullfMask.push_back(pt1);
+
+   }
+
+   //Create mask1
+   fillConvexPoly(maskHull, & hullfMask[0], hullfMask.size(), Scalar(255, 255, 255));
+
+   //Clone seamlessly
+   Rect rHull = boundingRect(hull);
+   center = (rHull.tl() + rHull.br()) / 2;
+
+   Mat bgSkin(txtimage.rows, txtimage.cols, CV_8UC3, average);
+   Mat finalOutput;
+   seamlessClone(txtimage, bgSkin, maskHull, center, finalOutput, NORMAL_CLONE);
+   return finalOutput;
 
 }
 
-Scalar skinTone(std::vector<Point2f> trgPoints, Mat avepic){
-  std::vector<Point2f> outpt1;
-  outpt1.push_back(trgPoints[69]);
-  outpt1.push_back(trgPoints[24]);
-  outpt1.push_back(trgPoints[19]);
+std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector < Point2f > & basePoints) {
+   // Keep a copy around
 
-  Rect r11 = boundingRect(outpt1);
+   // Rectangle to be used with Subdiv2D
+   Size size = img1.size();
+   Rect rect(0, 0, size.width, size.height);
+   Subdiv2D subdiv(rect);
+   int size_list = 0;
+   int row = 0;
+   for (std::vector < Point2f > ::iterator it = basePoints.begin(); it != basePoints.end(); it++) {
+      subdiv.insert( * it);
+   }
 
-  std::vector<Point> tRectInt1;
+   std::vector < Vec6f > triangleList;
+   subdiv.getTriangleList(triangleList);
 
-  //used in tranformation, distance inside rect
-  for(int g = 0; g < 3; g++)
-  {
-    tRectInt1.push_back( Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y)) ); // for fillConvexPoly
-  }////
-
-  Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
-  // Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
-
-  fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
-
-  Scalar average = mean(avepic(r11), mask1);
-
-  return average;
-}
-//////////////////////////////////////
-
-static void applyFragment(std::vector<Point2f> inpt, std::vector<Point2f> outpt, Mat &txtimage, Mat imgTr){
-  Rect r1 = boundingRect(inpt);
-  Rect r2 = boundingRect(outpt);
-
-  // std::cout << trIdx[i][0] << trIdx[i][1] << trIdx[i][2] << '\n';
-
-  ////// offsetting points be left top corner
-  std::vector<Point2f> t1Rect, t2Rect;
-  std::vector<Point> tRectInt;
-  //used in tranformation, distance inside rect
-  for(int g = 0; g < 3; g++)
-  {
-
-      t1Rect.push_back( Point2f( inpt[g].x - r1.x, inpt[g].y -  r1.y) ); //rect 1
-      t2Rect.push_back( Point2f( outpt[g].x - r2.x, outpt[g].y - r2.y) ); //rect2
-      tRectInt.push_back( Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y)) ); // for fillConvexPoly
-
-
-  }////
-
-  Mat img1Rect;
-  //crop
-  imgTr(r1).copyTo(img1Rect);
-  //trasnformation for the shape inside the rectangular
-  Mat warpMat = getAffineTransform( t1Rect, t2Rect );
-  Mat img2Rect = Mat::zeros(r2.height, r2.width,img1Rect.type());
-
-
-  warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
-
-  // Get mask by filling triangle
-  Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
-
-  ////////////////////
-  //image - mask
-  //tRectInt  - cvertices
-  //Scalar to specify color intensity
-  // 16 - line type
-  /////////////////////////////
-  //fill rect mask
-  fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
-
-  // apply traingl to the image mask first
-  multiply(img2Rect, mask, img2Rect);
-  multiply(txtimage(r2), Scalar(1.0,1.0,1.0) - mask, txtimage(r2));
-
-  txtimage(r2) = txtimage(r2) + img2Rect;
-}
-///////////////////
-
-Mat applySkinBg(Mat txtimage, std::vector<Point2f> basePoints, Scalar average){
-  std::vector<Point2f> hull;
-  std::vector<int> hullIdx;
-  std::vector<Point> hullfMask;
-  Mat maskHull = Mat::zeros(txtimage.rows, txtimage.cols, txtimage.depth());
-  Point center;
-
-  convexHull(basePoints, hullIdx, false, false);
-
-  for(int v = 0; v < hullIdx.size(); v++){
-    hull.push_back(basePoints[hullIdx[v]]);
-    //for mask
-    Point pt1(hull[v].x , hull[v].y);
-    hullfMask.push_back(pt1);
-
-
-  }
-
-//Create mask1
-fillConvexPoly(maskHull, &hullfMask[0], hullfMask.size(), Scalar(255,255,255));
-
-  //Clone seamlessly
-  Rect rHull = boundingRect(hull);
-  center = (rHull.tl() + rHull.br()) / 2;
-
-  Mat bgSkin(txtimage.rows, txtimage.cols, CV_8UC3, average);
-  Mat finalOutput;
-  seamlessClone(txtimage,bgSkin,maskHull,center,finalOutput, NORMAL_CLONE);
-  return finalOutput;
-
-}
-
-std::vector< std::vector<int> > triangulate_delaunay(Mat& img1, std::vector<Point2f> &basePoints){
-  // Keep a copy around
-
-  // Rectangle to be used with Subdiv2D
-  Size size = img1.size();
-  Rect rect(0, 0, size.width, size.height);
-  Subdiv2D subdiv(rect);
-  int size_list = 0;
-  int row = 0;
-  for( std::vector<Point2f>::iterator it = basePoints.begin(); it != basePoints.end(); it++){
-    subdiv.insert(*it);
-  }
-
-  std::vector<Vec6f> triangleList;
-  subdiv.getTriangleList(triangleList);
-
-  //check if points are inside
-  for (size_t i = 0; i < triangleList.size(); i++){
-    Vec6f trg = triangleList[i];
-    if (rect.contains(Point(cvRound(trg[0]),cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]),cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]),cvRound(trg[5])))){
-      size_list += 1;
-    }
-  }
-
-  std::vector<Point2f> pit(3);
-  std::vector< std::vector<int> > indaxes(size_list);
-
-  std::cout << size_list << '\n';
-
-//////////////////////////////////////
-  //define size for 2-D vector
-  for (size_t i = 0; i < triangleList.size(); i++){
-    Vec6f trg = triangleList[i];
-
-    pit[0] = Point2f(trg[0], trg[1]);
-    pit[1] = Point2f(trg[2], trg[3]);
-    pit[2] = Point2f(trg[4], trg[5]);
-
-        // Identify is the point inside the rectangle
-//    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
-    if (rect.contains(Point(cvRound(trg[0]),cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]),cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]),cvRound(trg[5])))){
-
-      for(int j = 0; j < 3; j++){
-//////////////
-        bool found = false;
-        auto pos = std::find(basePoints.begin(), basePoints.end(), pit[j]);
-        if( pos !=  basePoints.end()) found = true;
-        if(found)
-        {
-       int index = std::distance(basePoints.begin(), pos );
-
-       // std::cout << index << '\n';
-       indaxes[row].push_back(index);
-
-        }else{
-          std::cout << "not found:\t" << *pos << '\n';
-        }
+   //check if points are inside
+   for (size_t i = 0; i < triangleList.size(); i++) {
+      Vec6f trg = triangleList[i];
+      if (rect.contains(Point(cvRound(trg[0]), cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]), cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]), cvRound(trg[5])))) {
+         size_list += 1;
       }
-      row++;
-    } //if inside
-  }//for
+   }
 
-  return indaxes;
+   std::vector < Point2f > pit(3);
+   std::vector < std::vector < int > > indaxes(size_list);
+
+
+   //////////////////////////////////////
+   //define size for 2-D vector
+   for (size_t i = 0; i < triangleList.size(); i++) {
+      Vec6f trg = triangleList[i];
+
+      pit[0] = Point2f(trg[0], trg[1]);
+      pit[1] = Point2f(trg[2], trg[3]);
+      pit[2] = Point2f(trg[4], trg[5]);
+
+      // Identify is the point inside the rectangle
+      //    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
+      if (rect.contains(Point(cvRound(trg[0]), cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]), cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]), cvRound(trg[5])))) {
+
+         for (int j = 0; j < 3; j++) {
+            //////////////
+            bool found = false;
+            auto pos = std::find(basePoints.begin(), basePoints.end(), pit[j]);
+            if (pos != basePoints.end()) found = true;
+            if (found) {
+               int index = std::distance(basePoints.begin(), pos);
+
+               // std::cout << index << '\n';
+               indaxes[row].push_back(index);
+
+            } else {
+               std::cout << "not found:\t" << * pos << '\n';
+            }
+         }
+         row++;
+      } //if inside
+   } //for
+
+   return indaxes;
 }
 
-static void makeCopy( const char* src, string dst )
-{
-    std::ifstream srce( src, std::ios::binary ) ;
-    std::ofstream dest( dst, std::ios::binary ) ;
-    dest << srce.rdbuf() ;
+static void makeCopy(const char * src, string dst) {
+   std::ifstream srce(src, std::ios::binary);
+   std::ofstream dest(dst, std::ios::binary);
+   dest << srce.rdbuf();
 }
-int main( int argc, char** argv){
-
-
-  //for boundary boxes
-  //function returns object_detector
-  frontal_face_detector detector = get_frontal_face_detector();
-  //predict face landmark positions - 68 .dat import
-  shape_predictor fshape;
-
-  deserialize("shape_predictor_68_face_landmarks.dat") >> fshape; // change two lines into one
-
-  image_window win, win_faces;
-  array2d<rgb_pixel> img;
-  // string fname1("Untitled Folder/avefac.jpg");
-  string fname1(argv[1]);
-  // string fname1("Untitled Folder/face-straight1.jpg");
-
-
-  //
-load_image(img,fname1);
-
-//increase image?
-// pyramid_up(img);
-
-std::vector<dlib::rectangle> dets = detector(img);
-
-//if more than one face was detected
-if (dets.size() == 0 || dets.size() > 1) {
-  cout << "Picture contains none or many faces" << endl;
-  cout << "Please - use a picture with only one face." << endl;
-  exit(0);
-}
-
-
-// std::std::vector<full_object_detection> shapes; //for each of faces can be removed
-// std::vector<full_object_detection> shape;
-full_object_detection ws = fshape(img,dets[0]);
-cout << "number of parts: "<< ws.num_parts() << endl;
-
-// shape.push_back(ws);
-
-std::vector<Point2f> trgPoints;
-for(size_t i = 0; i < ws.num_parts(); i++){
-  trgPoints.push_back(Point2f(ws.part(i)(0), ws.part(i)(1)));
-}
-pointAbove(trgPoints);
-
-cout << "pixel position of second part: " << trgPoints[68] << endl;
-cout << "pixel position of second part: " << trgPoints[69] << endl;
-
-cout << "pixel position of second part: " << trgPoints[70] << endl;
-cout << "pixel position of second part: " << trgPoints.size()<< endl;
-
-//Adjust eeyebrow vertices
-// trgPoints[17].x -= 3;
-// trgPoints[17].y -= 5;
-//
-// trgPoints[26].x += 3;
-// trgPoints[26].y -= 5;
-
-
-/////////////////////////////////////////
-//SUBDIV
-
-
-
-/////////////////////////////////////
-//get the points from the file
-//points to map the texture
-std::vector<Point2f> basePoints;
-
-ifstream ifs("fullface-texture.txt");
-float q, w;
-while(ifs >> q >> w){
-  basePoints.push_back(Point2f(q, w));
-}
-
-basePoints.push_back(Point2f(325,140));
-basePoints.push_back(Point2f(512,134));
-basePoints.push_back(Point2f(699,140));
-
-
-// * split pic into triangles
-// * transfer each fragment triangle to certain location
-
-//////////////////////////////////////////
-
-Mat imgTr = imread(fname1,1); //1 so read in all colors
-//detect skin tone by mean calculation
-Scalar average = skinTone(trgPoints, imgTr);
-////////
-// Calculate brightness and contrast
-// double min, max;
-// minMaxLoc(imgTr, &min, &max);
-// std::cout << min << max << '\n';
-// double brightness = 255/(max- min);
-// double contrast = -min * brightness;
-// std::cout << "ll "<< min << max << '\n';
-
-
-imgTr.convertTo(imgTr, CV_32FC3);
-// Output image is set to white
-// Mat txtimage = imread("fullface-texture.jpg",1 );
-Mat txtimage = Mat::ones(Size(1024,1024), imgTr.type());
-txtimage = Scalar(average);
-
-txtimage.convertTo(txtimage, CV_32FC3);
-
-std::vector< std::vector<int> > trIdx;
-
-//////////
-//
-// * apply triangulation to 68 vertices
-// * apply indices to the triangles
-//
-
-
-trIdx = triangulate_delaunay(txtimage, basePoints);
-
-
-// basePoints[68] = Point2f(184,74);
-// basePoints[69] = Point2f(512,38);
-// basePoints[70] = Point2f(840,74);
-cout << "pixel position of first part:  " << basePoints[70] << endl;
-
-for (size_t i = 0; i < trIdx.size(); i++){
-
-  std::vector<Point2f> inpt;
-  inpt.push_back(trgPoints[trIdx[i][0]]);
-  inpt.push_back(trgPoints[trIdx[i][1]]);
-  inpt.push_back(trgPoints[trIdx[i][2]]);
-  std::vector<Point2f> outpt;
-  outpt.push_back(basePoints[trIdx[i][0]]);
-  outpt.push_back(basePoints[trIdx[i][1]]);
-  outpt.push_back(basePoints[trIdx[i][2]]);
-
-  applyFragment(inpt, outpt, txtimage, imgTr);
-
-}
-
-
-
-// convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 )
-// - rtype - depth of the output image
-// m[i,j] = alfa * img[i,j] + beta
-float contrast = 0.78;
-int brightness = 41;
-txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
-
-//txtimage.convertTo(txtimage, CV_8UC3);
-
-
-// CLONE SEAMLESSLY
-Mat finalOt = applySkinBg(txtimage, basePoints, average);
-
-size_t dotIndex = fname1.find_last_of(".");
-
-string OtFiles = fname1.substr(0, dotIndex);
-string objName =  OtFiles +".obj";
-
-// makeCopy("files/orgFace.obj", objName);
-// makeCopy("files/orgFace.mtl", "WW.obj");
-
-//distance
-// 659.303
-// 647.341
-// 624.424
-// 607.474
-// 562.43
-// 462.351
-// 321.263
-// 169.145
-
-// 27.4734
-std::cout << "/* message */" << '\n';
-double ratio = distanceFound(trgPoints[0], trgPoints[16])/27.4734; //decrease ratio
-// double ratio = distanceFound(trgPoints[0], trgPoints[16])/12;
-std::cout << ratio << '\n';
-
-
-
-std::vector<Point> faceLength;
-ifstream ist("tpoints.txt");
-int s, d;
-while(ist >> s >> d){
-  faceLength.push_back(Point(s, d));
-}
-
-std::cout << faceLength.size() << '\n';
-int tempT;
-int tempY;
-string typeInObj;
-float locationX;
-double poisitionOne;
-double poisitionTwo;
-double changeLengthOne;
-
-std::vector<string> verticesObj;
-string readline;
-int track = 0;
-
-ifstream objst("orgFaceD.obj");
-
-while (getline(objst, readline)) {
-  if (track != 0 && track <= 294){
-    verticesObj.push_back(readline);
-  }else if(track > 294){break;}
-  track++;
-}
-
-
-for (size_t i = 0; i < 14; i++){
-
-// good way cuz it copies exactly and even commenting
-// rather than storing and printing.
-// doesn't change anything else except of vertices.
-
-
-
-
-
-      istringstream iss1(verticesObj[faceLength[i].x-1]);
-      std::vector<string> tokens1{istream_iterator<string>{iss1},
-                      istream_iterator<string>{}};
+int main(int argc, char * * argv) {
+
+   //for boundary boxes
+   //function returns object_detector
+   frontal_face_detector detector = get_frontal_face_detector();
+   //predict face landmark positions - 68 .dat import
+   shape_predictor fshape;
+
+   deserialize("shape_predictor_68_face_landmarks.dat") >> fshape; // change two lines into one
+
+   image_window win, win_faces;
+   array2d < rgb_pixel > img;
+   // string fname1("Untitled Folder/avefac.jpg");
+   string fname1(argv[1]);
+   // string fname1("Untitled Folder/face-straight1.jpg");
+
+   //
+   load_image(img, fname1);
+
+   //increase image?
+   // pyramid_up(img);
+
+   std::vector < dlib::rectangle > dets = detector(img);
+
+   //if more than one face was detected
+   if (dets.size() == 0 || dets.size() > 1) {
+      cout << "Picture contains none or many faces" << endl;
+      cout << "Please - use a picture with only one face." << endl;
+      exit(0);
+   }
+
+   //*******************************************
+   int value;
+   int txtSize = 1024;
+   std::cout << "What resolution of the texture you need? 1 or 2" << '\n';
+   std::cout << "(1) 1024x1024  -- recomended " << '\n';
+   std::cout << "(2) 256x256" << '\n';
+   std::cin >> value;
+   while (std::cin.fail() || value > 2 || value <= 0) {
+      std::cout << "Please provide the correct number: 1 or 2" << '\n';
+      std::cin.clear();
+      std::cin.ignore(256, '\n');
+      std::cin >> value;
+   }
+
+   if (value == 2) {
+      txtSize = 256;
+      value = 4;
+   }
+
+   // std::std::vector<full_object_detection> shapes; //for each of faces can be removed
+   // std::vector<full_object_detection> shape;
+   full_object_detection ws = fshape(img, dets[0]);
+
+   // shape.push_back(ws);
+
+   std::vector < Point2f > trgPoints;
+   for (size_t i = 0; i < ws.num_parts(); i++) {
+      trgPoints.push_back(Point2f(ws.part(i)(0), ws.part(i)(1)));
+   }
+   pointAbove(trgPoints);
+
+
+   //Adjust eeyebrow vertices
+   // trgPoints[17].x -= 3;
+   // trgPoints[17].y -= 5;
+   //
+   // trgPoints[26].x += 3;
+   // trgPoints[26].y -= 5;
+
+   /////////////////////////////////////////
+   //SUBDIV
+
+   /////////////////////////////////////
+   //get the points from the file
+   //points to map the texture
+   std::vector < Point2f > basePoints;
+
+   ifstream ifs("fullface-texture.txt");
+   float q, w;
+   while (ifs >> q >> w) {
+      basePoints.push_back(Point2f(q / value, w / value));
+   }
+
+   basePoints.push_back(Point2f(325 / value, 140 / value));
+   basePoints.push_back(Point2f(512 / value, 134 / value));
+   basePoints.push_back(Point2f(699 / value, 140 / value));
+
+   // * split pic into triangles
+   // * transfer each fragment triangle to certain location
+
+   //////////////////////////////////////////
+
+   Mat imgTr = imread(fname1, 1); //1 so read in all colors
+   //detect skin tone by mean calculation
+   Scalar average = skinTone(trgPoints, imgTr);
+   ////////
+   // Calculate brightness and contrast
+   // double min, max;
+   // minMaxLoc(imgTr, &min, &max);
+   // std::cout << min << max << '\n';
+   // double brightness = 255/(max- min);
+   // double contrast = -min * brightness;
+   // std::cout << "ll "<< min << max << '\n';
+
+   imgTr.convertTo(imgTr, CV_32FC3);
+   // Output image is set to white
+   // Mat txtimage = imread("fullface-texture.jpg",1 );
+   Mat txtimage = Mat::ones(Size(txtSize, txtSize), imgTr.type());
+   txtimage = Scalar(average);
+
+   txtimage.convertTo(txtimage, CV_32FC3);
+
+   std::vector < std::vector < int > > trIdx;
+
+   //////////
+   //
+   // * apply triangulation to 68 vertices
+   // * apply indices to the triangles
+   //
+
+   trIdx = triangulate_delaunay(txtimage, basePoints);
+
+   for (size_t i = 0; i < trIdx.size(); i++) {
+
+      std::vector < Point2f > inpt;
+      inpt.push_back(trgPoints[trIdx[i][0]]);
+      inpt.push_back(trgPoints[trIdx[i][1]]);
+      inpt.push_back(trgPoints[trIdx[i][2]]);
+      std::vector < Point2f > outpt;
+      outpt.push_back(basePoints[trIdx[i][0]]);
+      outpt.push_back(basePoints[trIdx[i][1]]);
+      outpt.push_back(basePoints[trIdx[i][2]]);
+
+      applyFragment(inpt, outpt, txtimage, imgTr);
+
+   }
+
+   // convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 )
+   // - rtype - depth of the output image
+   // m[i,j] = alfa * img[i,j] + beta
+   float contrast = 0.78;
+   int brightness = 41;
+   txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
+
+   //txtimage.convertTo(txtimage, CV_8UC3);
+
+   // CLONE SEAMLESSLY
+   Mat finalOt = applySkinBg(txtimage, basePoints, average);
+
+   size_t dotIndex = fname1.find_last_of(".");
+
+   string OtFiles = fname1.substr(0, dotIndex);
+   string objName = OtFiles + ".obj";
+
+   // makeCopy("files/orgFace.obj", objName);
+   // makeCopy("files/orgFace.mtl", "WW.obj");
+
+   //distance
+   // 659.303
+   // 647.341
+   // 624.424
+   // 607.474
+   // 562.43
+   // 462.351
+   // 321.263
+   // 169.145
+
+   // 27.4734
+   double ratio = distanceFound(trgPoints[0], trgPoints[16]) / 27.4734; //decrease ratio
+   // double ratio = distanceFound(trgPoints[0], trgPoints[16])/12;
+   std::cout << ratio << '\n';
+
+   std::vector < Point > faceLength;
+   ifstream ist("tpoints.txt");
+   int s, d;
+   while (ist >> s >> d) {
+      faceLength.push_back(Point(s, d));
+   }
+
+   int tempT;
+   int tempY;
+   string typeInObj;
+   float locationX;
+   double poisitionOne;
+   double poisitionTwo;
+   double changeLengthOne;
+
+   std::vector < string > verticesObj;
+   string readline;
+   int track = 0;
+
+   ifstream objst("orgFaceD.obj");
+
+   while (getline(objst, readline)) {
+      if (track != 0 && track <= 294) {
+         verticesObj.push_back(readline);
+      } else if (track > 294) {
+         break;
+      }
+      track++;
+   }
+
+   for (size_t i = 0; i < 14; i++) {
+
+      // good way cuz it copies exactly and even commenting
+      // rather than storing and printing.
+      // doesn't change anything else except of vertices.
+
+      istringstream iss1(verticesObj[faceLength[i].x - 1]);
+      std::vector < string > tokens1 {
+         istream_iterator < string > {
+               iss1
+            },
+            istream_iterator < string > {}
+      };
       poisitionOne = atof(tokens1[1].c_str());
 
-      istringstream iss2(verticesObj[faceLength[i].y-1]);
-      std::vector<string> tokens2{istream_iterator<string>{iss2},
-                      istream_iterator<string>{}};
+      istringstream iss2(verticesObj[faceLength[i].y - 1]);
+      std::vector < string > tokens2 {
+         istream_iterator < string > {
+               iss2
+            },
+            istream_iterator < string > {}
+      };
       poisitionTwo = atof(tokens2[1].c_str());
 
       tokens1[0] += ' ';
       tokens2[0] += ' ';
 
-
-
-      changeLengthOne = ((distanceFound(trgPoints[faceLength[i+14].x], trgPoints[faceLength[i+14].y]) / ratio) - (poisitionTwo - poisitionOne)) /4;
+      changeLengthOne = ((distanceFound(trgPoints[faceLength[i + 14].x], trgPoints[faceLength[i + 14].y]) / ratio) - (poisitionTwo - poisitionOne)) / 4;
 
       //write
       std::cout << changeLengthOne << '\n';
@@ -502,95 +477,86 @@ for (size_t i = 0; i < 14; i++){
       // tokens1[1].substr(0, tokens1[1].size()-2);
       // tokens2[1].substr(0, tokens2[1].size()-2);
 
-      for(int i = 0; i < 3; i++){
-        tokens1[i] += ' ';
-        tokens2[i] += ' ';
+      for (int i = 0; i < 3; i++) {
+         tokens1[i] += ' ';
+         tokens2[i] += ' ';
       }
 
-      verticesObj[faceLength[i].x-1] = accumulate(tokens1.begin(), tokens1.end(), string(""));
-      verticesObj[faceLength[i].y-1] = accumulate(tokens2.begin(), tokens2.end(), string(""));
+      verticesObj[faceLength[i].x - 1] = accumulate(tokens1.begin(), tokens1.end(), string(""));
+      verticesObj[faceLength[i].y - 1] = accumulate(tokens2.begin(), tokens2.end(), string(""));
 
-  //read te
-}
+      //read te
+   }
 
-string textureFname = OtFiles + "Texture.jpg";
-imwrite(textureFname, finalOt);
+   string textureFname = OtFiles + "Texture.jpg";
+   // imwrite(textureFname, finalOt);
 
+   ifstream mtlst("orgFaceD.mtl");
+   ofstream mtlOt(OtFiles + ".mtl");
+   track = 0;
 
-ifstream mtlst("orgFaceD.mtl");
-ofstream mtlOt(OtFiles +".mtl");
-track = 0;
-
-string writeMtl;
-while(getline(mtlst, writeMtl))
-    {
-      if(track < 11){
-        std::cout << track << '\n';
-        mtlOt << writeMtl << '\n';
-      }else{
-          mtlOt << "  " << "map_Ka "<< textureFname << '\n';
-          mtlOt << "  " << "map_Kd "<< textureFname << '\n';
-          mtlOt.flush();
-          break;
+   string writeMtl;
+   while (getline(mtlst, writeMtl)) {
+      if (track < 11) {
+         mtlOt << writeMtl << '\n';
+      } else {
+         mtlOt << "  " << "map_Ka " << textureFname << '\n';
+         mtlOt << "  " << "map_Kd " << textureFname << '\n';
+         mtlOt.flush();
+         break;
       }
-  track++;
-}
+      track++;
+   }
 
+   std::cout << OtFiles << '\n';
+   ifstream objst1("orgFaceD.obj");
+   ofstream objOt(OtFiles + ".obj");
 
+   track = 0;
+   // for (int i = 0; i < 294; i++){
+   //   objOt << verticesObj[i] << '\n';
+   //
+   // }
+   string readout;
+   while (!objst1.eof()) {
+      std::getline(objst1, readout);
+      if (track == 0 || track > 294) {
+         objOt << readout << '\n';
+         objOt.flush();
 
-ifstream objst1("orgFaceD.obj");
-ofstream objOt(OtFiles +".obj");
+      } else {
+         objOt << verticesObj[track - 1] << '\n';
+      }
+      track++;
+   }
 
-track = 0;
-// for (int i = 0; i < 294; i++){
-//   objOt << verticesObj[i] << '\n';
-//
-// }
-string readout;
-while(!objst1.eof())
-    {
-        std::getline(objst1, readout);
-        if(track == 0 || track > 294){
-          objOt << readout << '\n';
-          objOt.flush();
+   // std::cout << "/* message */" << '\n';
+   // for (int i = 0; i<8; i++){
+   //   double dist = distanceFound(trgPoints[i], trgPoints[16-i]);
+   //
+   //   std::cout << dist << '\n';
+   // }
 
-        }else{
-            objOt << verticesObj[track-1] << '\n';
-        }
-  track++;
-}
+   //////////////////MAKE FOLDER
+   //
+   // const int dir_err = mkdir("foo", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+   // if (-1 == dir_err)
+   // {
+   //     printf("Error creating directory!n");
+   //     exit(1);
+   // }
 
+   imshow("Let's see", finalOt);
 
+   ////////////////////////////
 
-// std::cout << "/* message */" << '\n';
-// for (int i = 0; i<8; i++){
-//   double dist = distanceFound(trgPoints[i], trgPoints[16-i]);
-//
-//   std::cout << dist << '\n';
-// }
+   imshow("Morphed Face", txtimage);
+   //imwrite("final3.jpg", txtimage);
 
-//////////////////MAKE FOLDER
-//
-// const int dir_err = mkdir("foo", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-// if (-1 == dir_err)
-// {
-//     printf("Error creating directory!n");
-//     exit(1);
-// }
+   ///////////////////////////
 
-
-
-imshow("Let's see", finalOt);
-
-////////////////////////////
-
-imshow("Morphed Face", txtimage);
-//imwrite("final3.jpg", txtimage);
-
-///////////////////////////
-
- // cin.get();
- waitKey(0);
- return(0);
-//wait for a character to exit
+   // cin.get();
+   waitKey(0);
+   return (0);
+   //wait for a character to exit
 }
