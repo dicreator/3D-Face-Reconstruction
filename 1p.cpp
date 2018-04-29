@@ -1,3 +1,12 @@
+/*
+|--------------------------------------------------------------------------
+| 3D Face Reconstruction
+|--------------------------------------------------------------------------
+|
+| This project ...
+| @author Dinmukhamed Komekov <@dicreator>
+| @version 1.0
+*/
 
 #include <opencv2/opencv.hpp>
 #include <sys/stat.h>
@@ -25,15 +34,20 @@ using namespace std;
 // Face Alignment
 // filter and blur
 
+// =======================================================================//
+// ! A description of what the following functions have in common         //
+// =======================================================================//
 
-//////////////////////////
 static double distanceFound(Point2f first, Point2f second) {
    double dis = norm(first - second);
    return dis;
 
 }
 
-//27 30
+// =======================================================================//
+// ! A description of what the following functions have in common         //
+// =======================================================================//
+
 static void pointAbove(std::vector < Point2f > & trgPoints) {
 
    Point2f first = trgPoints[27];
@@ -58,77 +72,83 @@ static void pointAbove(std::vector < Point2f > & trgPoints) {
    trgPoints.push_back(pntAboveR);
 }
 
+// =======================================================================//
+// ! Detect the skin tone by mean calculation                             //
+// =======================================================================//
+
 Scalar skinTone(std::vector < Point2f > trgPoints, Mat avepic) {
-      std::vector < Point2f > outpt1;
-      outpt1.push_back(trgPoints[69]);
-      outpt1.push_back(trgPoints[24]);
-      outpt1.push_back(trgPoints[19]);
+   //define a triangle
+   std::vector < Point2f > outpt1;
+   outpt1.push_back(trgPoints[69]);
+   outpt1.push_back(trgPoints[24]);
+   outpt1.push_back(trgPoints[19]);
+   Rect r11 = boundingRect(outpt1);
+   std::vector < Point > tRectInt1;
 
-      Rect r11 = boundingRect(outpt1);
-
-      std::vector < Point > tRectInt1;
-
-      //used in tranformation, distance inside rect
-      for (int g = 0; g < 3; g++) {
-         tRectInt1.push_back(Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y))); // for fillConvexPoly
-      } ////
-
-      Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
-      // Mat mask2 = Mat::zeros(r11.height, r11.width, avepic.type());
-
-      fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
-
-      Scalar average = mean(avepic(r11), mask1);
-
-      return average;
+   //used in tranformation, distance inside rect
+   for (int g = 0; g < 3; g++) {
+      tRectInt1.push_back(Point((int)(outpt1[g].x - r11.x), (int)(outpt1[g].y - r11.y))); // for fillConvexPoly
    }
-   //////////////////////////////////////
+   //create a mask
+   Mat mask1 = Mat::zeros(r11.height, r11.width, CV_8U);
+   fillConvexPoly(mask1, tRectInt1, Scalar(1.0, 1.0, 1.0));
+   //retrieve the average skin color from the triangular mask
+   Scalar average = mean(avepic(r11), mask1);
+   //retur the value
+   return average;
+}
+
+// =======================================================================//
+// ! Adds a face triangle component through Affine Tranformation          //
+// =======================================================================//
 
 static void applyFragment(std::vector < Point2f > inpt, std::vector < Point2f > outpt, Mat & txtimage, Mat imgTr) {
-      Rect r1 = boundingRect(inpt);
-      Rect r2 = boundingRect(outpt);
+   Rect r1 = boundingRect(inpt);
+   Rect r2 = boundingRect(outpt);
 
+   ////// offsetting points be left top corner
+   std::vector < Point2f > t1Rect, t2Rect;
+   std::vector < Point > tRectInt;
+   //used in tranformation, distance inside rect
+   for (int g = 0; g < 3; g++) {
 
-      ////// offsetting points be left top corner
-      std::vector < Point2f > t1Rect, t2Rect;
-      std::vector < Point > tRectInt;
-      //used in tranformation, distance inside rect
-      for (int g = 0; g < 3; g++) {
+      t1Rect.push_back(Point2f(inpt[g].x - r1.x, inpt[g].y - r1.y)); //rect 1
+      t2Rect.push_back(Point2f(outpt[g].x - r2.x, outpt[g].y - r2.y)); //rect2
+      tRectInt.push_back(Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y))); // for fillConvexPoly
 
-         t1Rect.push_back(Point2f(inpt[g].x - r1.x, inpt[g].y - r1.y)); //rect 1
-         t2Rect.push_back(Point2f(outpt[g].x - r2.x, outpt[g].y - r2.y)); //rect2
-         tRectInt.push_back(Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y))); // for fillConvexPoly
+   } ////
 
-      } ////
+   Mat img1Rect;
+   //crop
+   imgTr(r1).copyTo(img1Rect);
+   //trasnformation for the shape inside the rectangular
+   Mat warpMat = getAffineTransform(t1Rect, t2Rect);
+   Mat img2Rect = Mat::zeros(r2.height, r2.width, img1Rect.type());
 
-      Mat img1Rect;
-      //crop
-      imgTr(r1).copyTo(img1Rect);
-      //trasnformation for the shape inside the rectangular
-      Mat warpMat = getAffineTransform(t1Rect, t2Rect);
-      Mat img2Rect = Mat::zeros(r2.height, r2.width, img1Rect.type());
+   warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
 
-      warpAffine(img1Rect, img2Rect, warpMat, img2Rect.size(), INTER_LINEAR, BORDER_REFLECT_101);
+   // Get mask by filling triangle
+   Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
 
-      // Get mask by filling triangle
-      Mat mask = Mat::zeros(r2.height, r2.width, CV_32FC3);
+   ////////////////////
+   //image - mask
+   //tRectInt  - cvertices
+   //Scalar to specify color intensity
+   // 16 - line type
+   /////////////////////////////
+   //fill rect mask
+   fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
 
-      ////////////////////
-      //image - mask
-      //tRectInt  - cvertices
-      //Scalar to specify color intensity
-      // 16 - line type
-      /////////////////////////////
-      //fill rect mask
-      fillConvexPoly(mask, tRectInt, Scalar(1.0, 1.0, 1.0));
+   // apply traingl to the image mask first
+   multiply(img2Rect, mask, img2Rect);
+   multiply(txtimage(r2), Scalar(1.0, 1.0, 1.0) - mask, txtimage(r2));
 
-      // apply traingl to the image mask first
-      multiply(img2Rect, mask, img2Rect);
-      multiply(txtimage(r2), Scalar(1.0, 1.0, 1.0) - mask, txtimage(r2));
+   txtimage(r2) = txtimage(r2) + img2Rect;
+}
 
-      txtimage(r2) = txtimage(r2) + img2Rect;
-   }
-   ///////////////////
+// =======================================================================//
+// ! Applies blur filter to smooth face boarders with the Background      //
+// =======================================================================//
 
 Mat applySkinBg(Mat txtimage, std::vector < Point2f > basePoints, Scalar average) {
    std::vector < Point2f > hull;
@@ -161,6 +181,10 @@ Mat applySkinBg(Mat txtimage, std::vector < Point2f > basePoints, Scalar average
 
 }
 
+// =======================================================================//
+// ! A description of what the following functions have in common         //
+// =======================================================================//
+
 std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector < Point2f > & basePoints) {
    // Keep a copy around
 
@@ -177,7 +201,7 @@ std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector
    std::vector < Vec6f > triangleList;
    subdiv.getTriangleList(triangleList);
 
-   //check if points are inside
+   //Find the number of the triangles inside the face region
    for (size_t i = 0; i < triangleList.size(); i++) {
       Vec6f trg = triangleList[i];
       if (rect.contains(Point(cvRound(trg[0]), cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]), cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]), cvRound(trg[5])))) {
@@ -188,9 +212,8 @@ std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector
    std::vector < Point2f > pit(3);
    std::vector < std::vector < int > > indaxes(size_list);
 
-
    //////////////////////////////////////
-   //define size for 2-D vector
+   //Loop to find indexes to structure triangles
    for (size_t i = 0; i < triangleList.size(); i++) {
       Vec6f trg = triangleList[i];
 
@@ -199,11 +222,9 @@ std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector
       pit[2] = Point2f(trg[4], trg[5]);
 
       // Identify is the point inside the rectangle
-      //    if ( rect.contains(pit[0]) && rect.contains(pit[1]) && rect.contains(pit[2])){
       if (rect.contains(Point(cvRound(trg[0]), cvRound(trg[1]))) && rect.contains(Point(cvRound(trg[2]), cvRound(trg[3]))) && rect.contains(Point(cvRound(trg[4]), cvRound(trg[5])))) {
 
          for (int j = 0; j < 3; j++) {
-            //////////////
             bool found = false;
             auto pos = std::find(basePoints.begin(), basePoints.end(), pit[j]);
             if (pos != basePoints.end()) found = true;
@@ -224,11 +245,20 @@ std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector
    return indaxes;
 }
 
+// =======================================================================//
+// ! A description of what the following functions have in common         //
+// =======================================================================//
+
 static void makeCopy(const char * src, string dst) {
    std::ifstream srce(src, std::ios::binary);
    std::ofstream dest(dst, std::ios::binary);
    dest << srce.rdbuf();
 }
+
+// =======================================================================//
+//  MAIN                                                                  //
+// =======================================================================//
+
 int main(int argc, char * * argv) {
 
    //for boundary boxes
@@ -239,18 +269,14 @@ int main(int argc, char * * argv) {
 
    deserialize("shape_predictor_68_face_landmarks.dat") >> fshape; // change two lines into one
 
-   image_window win, win_faces;
    array2d < rgb_pixel > img;
-   // string fname1("Untitled Folder/avefac.jpg");
    string fname1(argv[1]);
-   // string fname1("Untitled Folder/face-straight1.jpg");
-
-   //
    load_image(img, fname1);
 
    //increase image?
    // pyramid_up(img);
 
+   // * detect faces
    std::vector < dlib::rectangle > dets = detector(img);
 
    //if more than one face was detected
@@ -260,7 +286,8 @@ int main(int argc, char * * argv) {
       exit(0);
    }
 
-   //*******************************************
+   // ==========================================
+   //  Set up texture resolution
    int value;
    int txtSize = 1024;
    std::cout << "What resolution of the texture you need? 1 or 2" << '\n';
@@ -279,52 +306,39 @@ int main(int argc, char * * argv) {
       value = 4;
    }
 
-   // std::std::vector<full_object_detection> shapes; //for each of faces can be removed
-   // std::vector<full_object_detection> shape;
+   // ==========================================
+   //  Transfer facial landmarks into vecotor of points
    full_object_detection ws = fshape(img, dets[0]);
-
-   // shape.push_back(ws);
 
    std::vector < Point2f > trgPoints;
    for (size_t i = 0; i < ws.num_parts(); i++) {
       trgPoints.push_back(Point2f(ws.part(i)(0), ws.part(i)(1)));
    }
+   //add extre forehead points
    pointAbove(trgPoints);
 
-
-   //Adjust eeyebrow vertices
-   // trgPoints[17].x -= 3;
-   // trgPoints[17].y -= 5;
-   //
-   // trgPoints[26].x += 3;
-   // trgPoints[26].y -= 5;
-
-   /////////////////////////////////////////
-   //SUBDIV
-
-   /////////////////////////////////////
-   //get the points from the file
-   //points to map the texture
+   // ==========================================
+   //  Store vecotor of targeted points of the UV map.
    std::vector < Point2f > basePoints;
-
+   // read from the file
    ifstream ifs("fullface-texture.txt");
    float q, w;
    while (ifs >> q >> w) {
       basePoints.push_back(Point2f(q / value, w / value));
    }
-
+   //forehead points
    basePoints.push_back(Point2f(325 / value, 140 / value));
    basePoints.push_back(Point2f(512 / value, 134 / value));
    basePoints.push_back(Point2f(699 / value, 140 / value));
 
-   // * split pic into triangles
-   // * transfer each fragment triangle to certain location
 
-   //////////////////////////////////////////
+   // ==========================================
+   //  Calculate Background color + create the texture
 
    Mat imgTr = imread(fname1, 1); //1 so read in all colors
    //detect skin tone by mean calculation
    Scalar average = skinTone(trgPoints, imgTr);
+
    ////////
    // Calculate brightness and contrast
    // double min, max;
@@ -333,69 +347,59 @@ int main(int argc, char * * argv) {
    // double brightness = 255/(max- min);
    // double contrast = -min * brightness;
    // std::cout << "ll "<< min << max << '\n';
+   //////////////
 
    imgTr.convertTo(imgTr, CV_32FC3);
-   // Output image is set to white
-   // Mat txtimage = imread("fullface-texture.jpg",1 );
+
+   // Create an empty texture matrix filled with the skin color
    Mat txtimage = Mat::ones(Size(txtSize, txtSize), imgTr.type());
    txtimage = Scalar(average);
-
    txtimage.convertTo(txtimage, CV_32FC3);
 
-   std::vector < std::vector < int > > trIdx;
-
-   //////////
-   //
+   // ==========================================
    // * apply triangulation to 68 vertices
    // * apply indices to the triangles
    //
-
+   std::vector < std::vector < int > > trIdx;
    trIdx = triangulate_delaunay(txtimage, basePoints);
 
    for (size_t i = 0; i < trIdx.size(); i++) {
 
+     //Face triangle -extract from
       std::vector < Point2f > inpt;
       inpt.push_back(trgPoints[trIdx[i][0]]);
       inpt.push_back(trgPoints[trIdx[i][1]]);
       inpt.push_back(trgPoints[trIdx[i][2]]);
+
+      //UV texture triangle -target  to
       std::vector < Point2f > outpt;
       outpt.push_back(basePoints[trIdx[i][0]]);
       outpt.push_back(basePoints[trIdx[i][1]]);
       outpt.push_back(basePoints[trIdx[i][2]]);
 
+      //Adds a face triangle component through Affine Tranformation
+      //to the texture
       applyFragment(inpt, outpt, txtimage, imgTr);
 
    }
 
    // convertTo( OutputArray m, int rtype, double alpha=1, double beta=0 )
-   // - rtype - depth of the output image
-   // m[i,j] = alfa * img[i,j] + beta
+   // - rtype = CV_8UC3 - depth of the output image
+   // finalM[i,j] = brightness * img[i,j] + contrast
    float contrast = 0.78;
    int brightness = 41;
    txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
 
-   //txtimage.convertTo(txtimage, CV_8UC3);
-
+   // ==========================================
    // CLONE SEAMLESSLY
+
+   //Smooth face boarders with the Background
    Mat finalOt = applySkinBg(txtimage, basePoints, average);
 
    size_t dotIndex = fname1.find_last_of(".");
-
    string OtFiles = fname1.substr(0, dotIndex);
    string objName = OtFiles + ".obj";
 
-   // makeCopy("files/orgFace.obj", objName);
-   // makeCopy("files/orgFace.mtl", "WW.obj");
-
-   //distance
-   // 659.303
-   // 647.341
-   // 624.424
-   // 607.474
-   // 562.43
-   // 462.351
-   // 321.263
-   // 169.145
 
    // 27.4734
    double ratio = distanceFound(trgPoints[0], trgPoints[16]) / 27.4734; //decrease ratio
@@ -488,8 +492,9 @@ int main(int argc, char * * argv) {
       //read te
    }
 
+
    string textureFname = OtFiles + "Texture.jpg";
-   // imwrite(textureFname, finalOt);
+   imwrite(textureFname, finalOt);
 
    ifstream mtlst("orgFaceD.mtl");
    ofstream mtlOt(OtFiles + ".mtl");
