@@ -9,5 +9,5 @@ newmtl 08___Default
 	Kd 0.5882 0.5882 0.5882
 	Ks 0.0000 0.0000 0.0000
 	Ke 0.0000 0.0000 0.0000
-  map_Ka MatTexture.jpg
-  map_Kd MatTexture.jpg
+  map_Ka uploadFiles/Ivo1Texture.jpg
+  map_Kd uploadFiles/Ivo1Texture.jpg

@@ -25,6 +25,8 @@
 #include <dlib/gui_widgets.h>
 #include <dlib/image_io.h>
 
+#include <ctime>
+
 using namespace dlib;
 using namespace cv;
 using namespace std;
@@ -263,6 +265,8 @@ int main(int argc, char * * argv) {
 
    //for boundary boxes
    //function returns object_detector
+   clock_t begin = clock();
+
    frontal_face_detector detector = get_frontal_face_detector();
    //predict face landmark positions - 68 .dat import
    shape_predictor fshape;
@@ -279,6 +283,9 @@ int main(int argc, char * * argv) {
    // * detect faces
    std::vector < dlib::rectangle > dets = detector(img);
 
+   clock_t end = clock();
+  double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+   std::cout << elapsed_secs << '\n';	
    //if more than one face was detected
    if (dets.size() == 0 || dets.size() > 1) {
       cout << "Picture contains none or many faces" << endl;
@@ -402,7 +409,7 @@ int main(int argc, char * * argv) {
 
 
    // 27.4734
-   double ratio = distanceFound(trgPoints[0], trgPoints[16]) / 27.4734; //decrease ratio
+   double ratio = distanceFound(trgPoints[0], trgPoints[16]) / 28.8; //decrease ratio
    // double ratio = distanceFound(trgPoints[0], trgPoints[16])/12;
    std::cout << ratio << '\n';
 
@@ -551,17 +558,17 @@ int main(int argc, char * * argv) {
    //     exit(1);
    // }
 
-   imshow("Let's see", finalOt);
+   //imshow("Let's see", finalOt);
 
    ////////////////////////////
 
-   imshow("Morphed Face", txtimage);
+   //imshow("Morphed Face", txtimage);
    //imwrite("final3.jpg", txtimage);
 
    ///////////////////////////
 
    // cin.get();
-   waitKey(0);
+   //waitKey(0);
    return (0);
    //wait for a character to exit
 }
