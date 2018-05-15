@@ -3,11 +3,11 @@
 | 3D Face Reconstruction
 |--------------------------------------------------------------------------
 |
-| This project ...
+| This project exists to create 3D face models that are generated from 2D images.
 | @author Dinmukhamed Komekov <@dicreator>
 | @version 1.0
 */
-
+//import libraries
 #include <opencv2/opencv.hpp>
 #include <sys/stat.h>
 #include <iostream>
@@ -31,13 +31,9 @@ using namespace dlib;
 using namespace cv;
 using namespace std;
 
-// Detect faces
-// Transformation to original
-// Face Alignment
-// filter and blur
 
 // =======================================================================//
-// ! A description of what the following functions have in common         //
+// ! Gives a distance in pixels between 2 point on an image               //
 // =======================================================================//
 
 static double distanceFound(Point2f first, Point2f second) {
@@ -47,7 +43,7 @@ static double distanceFound(Point2f first, Point2f second) {
 }
 
 // =======================================================================//
-// ! A description of what the following functions have in common         //
+// ! Detects extra forehead points from an image (its list of points)     //
 // =======================================================================//
 
 static void pointAbove(std::vector < Point2f > & trgPoints) {
@@ -118,7 +114,7 @@ static void applyFragment(std::vector < Point2f > inpt, std::vector < Point2f > 
       t2Rect.push_back(Point2f(outpt[g].x - r2.x, outpt[g].y - r2.y)); //rect2
       tRectInt.push_back(Point((int)(outpt[g].x - r2.x), (int)(outpt[g].y - r2.y))); // for fillConvexPoly
 
-   } ////
+   }//for
 
    Mat img1Rect;
    //crop
@@ -184,7 +180,7 @@ Mat applySkinBg(Mat txtimage, std::vector < Point2f > basePoints, Scalar average
 }
 
 // =======================================================================//
-// ! A description of what the following functions have in common         //
+// ! Divide image into triangles with the given list of facial landmarks  //
 // =======================================================================//
 
 std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector < Point2f > & basePoints) {
@@ -248,7 +244,7 @@ std::vector < std::vector < int > > triangulate_delaunay(Mat & img1, std::vector
 }
 
 // =======================================================================//
-// ! A description of what the following functions have in common         //
+// ! Make a copy of the image         //
 // =======================================================================//
 
 static void makeCopy(const char * src, string dst) {
@@ -277,7 +273,7 @@ int main(int argc, char * * argv) {
    string fname1(argv[1]);
    load_image(img, fname1);
 
-   //increase image?
+   //to increase image, uncomment the bottom line
    // pyramid_up(img);
 
    // * detect faces
@@ -285,7 +281,7 @@ int main(int argc, char * * argv) {
 
    clock_t end = clock();
   double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
-   std::cout << elapsed_secs << '\n';	
+   std::cout << elapsed_secs << '\n';
    //if more than one face was detected
    if (dets.size() == 0 || dets.size() > 1) {
       cout << "Picture contains none or many faces" << endl;
@@ -398,7 +394,7 @@ int main(int argc, char * * argv) {
    txtimage.convertTo(txtimage, CV_8UC3, contrast, brightness);
 
    // ==========================================
-   // CLONE SEAMLESSLY
+   // CLONE SEAMLESSLY -- apply skin tone to Background
 
    //Smooth face boarders with the Background
    Mat finalOt = applySkinBg(txtimage, basePoints, average);
@@ -413,6 +409,11 @@ int main(int argc, char * * argv) {
    // double ratio = distanceFound(trgPoints[0], trgPoints[16])/12;
    std::cout << ratio << '\n';
 
+
+   // ==========================================
+   // 3D Model Creation
+
+   //read points
    std::vector < Point > faceLength;
    ifstream ist("tpoints.txt");
    int s, d;
@@ -420,6 +421,7 @@ int main(int argc, char * * argv) {
       faceLength.push_back(Point(s, d));
    }
 
+   //read vertices from 3d file
    int tempT;
    int tempY;
    string typeInObj;
@@ -443,33 +445,43 @@ int main(int argc, char * * argv) {
       track++;
    }
 
+   // Adjustment of location of vertices
+
    for (size_t i = 0; i < 14; i++) {
 
+      //Store vertices in 'vector' then adjust location of each vertex
       // good way cuz it copies exactly and even commenting
       // rather than storing and printing.
       // doesn't change anything else except of vertices.
 
+      // x-axis
       istringstream iss1(verticesObj[faceLength[i].x - 1]);
+      //find the point coordinate of Left side
       std::vector < string > tokens1 {
          istream_iterator < string > {
                iss1
             },
             istream_iterator < string > {}
       };
+      //convert to float
       poisitionOne = atof(tokens1[1].c_str());
 
+      //y-axis
       istringstream iss2(verticesObj[faceLength[i].y - 1]);
+      //find the point coordinate of Right side
       std::vector < string > tokens2 {
          istream_iterator < string > {
                iss2
             },
             istream_iterator < string > {}
       };
+      //convert to float
       poisitionTwo = atof(tokens2[1].c_str());
 
       tokens1[0] += ' ';
       tokens2[0] += ' ';
 
+      // Calculte by how much we need to move the vertices
       changeLengthOne = ((distanceFound(trgPoints[faceLength[i + 14].x], trgPoints[faceLength[i + 14].y]) / ratio) - (poisitionTwo - poisitionOne)) / 4;
 
       //write
@@ -480,13 +492,6 @@ int main(int argc, char * * argv) {
 
       tokens1[1] = to_string(poisitionOne);
       tokens2[1] = to_string(poisitionTwo);
-
-      // tokens1[1].pop_back();
-      // tokens1[1].pop_back();
-      // tokens2[1].pop_back();
-      // tokens2[1].pop_back();
-      // tokens1[1].substr(0, tokens1[1].size()-2);
-      // tokens2[1].substr(0, tokens2[1].size()-2);
 
       for (int i = 0; i < 3; i++) {
          tokens1[i] += ' ';
