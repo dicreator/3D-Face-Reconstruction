@@ -5,6 +5,7 @@ The goal of this project is to create a 3D face reconstruction software that cou
 
 ![](file1.gif)
 
+* https://www.youtube.com/watch?v=e6nqRUt7muw - video preview
 
 ### Prerequisites
 
